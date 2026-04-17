@@ -211,6 +211,10 @@ function getCommandHint(nodeId, hasAudience) {
     return "Comandos: menú, ayuda, reiniciar";
   }
 
+  if (nodeId === MAIN_MENU_ID) {
+    return "Comandos: menú, reiniciar, ayuda";
+  }
+
   return "Comandos: menú, volver, ayuda";
 }
 
@@ -218,17 +222,15 @@ function buildResponse(lines) {
   return [BRAND, "", ...lines].join("\n");
 }
 
-function buildMenuMessage(title, children, selectedAudience) {
-  const activeNodeId = children.length && children[0].type === "audience_option" ? ROOT_NODE_ID : null;
-
+function buildMenuMessage(node, children, selectedAudience) {
   return buildResponse([
     getAudienceLabel(selectedAudience),
     "",
-    `📂 ${title}`,
+    `📂 ${node.label}`,
     "",
     ...formatOptions(children),
     "",
-    getCommandHint(activeNodeId, selectedAudience !== "both" || title !== "Seleccione su contexto docente")
+    getCommandHint(node.id, selectedAudience !== "both" || node.id !== ROOT_NODE_ID)
   ]);
 }
 
@@ -251,6 +253,14 @@ function buildHelpMessage() {
     "Comandos: menú, inicio, volver, reiniciar, ayuda.",
     "Atajos: soporte, contacto, urgente."
   ]);
+}
+
+function appendCommandHint(lines, nodeId, selectedAudience) {
+  return [
+    ...lines,
+    "",
+    getCommandHint(nodeId, selectedAudience !== "both" || nodeId !== ROOT_NODE_ID)
+  ];
 }
 
 function formatSuggestionItem(item) {
@@ -288,50 +298,74 @@ function buildFallbackMessage(node, children, nodes, selectedAudience, userText)
     : children.slice(0, 4).map((child) => formatSuggestionItem(child));
   const suggestions = suggestionsSource.map((label, index) => `${index + 1}. ${label}`);
 
-  return buildResponse([
-    getAudienceLabel(selectedAudience),
-    "",
-    `⚠️ No ubiqué esa opción en: ${node.label}.`,
-    "",
-    ...(chosenSuggestions.length ? ["Posibles rutas:", ""] : []),
-    ...suggestions,
-    "",
-    "Use menú, inicio o ayuda."
-  ]);
+  return buildResponse(
+    appendCommandHint(
+      [
+        getAudienceLabel(selectedAudience),
+        "",
+        `⚠️ No ubiqué esa opción en: ${node.label}.`,
+        "",
+        ...(chosenSuggestions.length ? ["Posibles rutas:", ""] : []),
+        ...suggestions,
+        "",
+        "Use menú, inicio o ayuda."
+      ],
+      node.id,
+      selectedAudience
+    )
+  );
 }
 
 function buildAmbiguousMessage(suggestions, selectedAudience) {
-  return buildResponse([
-    getAudienceLabel(selectedAudience),
-    "",
-    "⚠️ Ubico más de una ruta posible.",
-    "",
-    ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
-    "",
-    "Escriba el número o el nombre más completo."
-  ]);
+  return buildResponse(
+    appendCommandHint(
+      [
+        getAudienceLabel(selectedAudience),
+        "",
+        "⚠️ Ubico más de una ruta posible.",
+        "",
+        ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
+        "",
+        "Escriba el número o el nombre más completo."
+      ],
+      MAIN_MENU_ID,
+      selectedAudience
+    )
+  );
 }
 
 function buildConfirmationMessage(suggestions, selectedAudience) {
-  return buildResponse([
-    getAudienceLabel(selectedAudience),
-    "",
-    "❓ Detecté una ruta probable.",
-    "",
-    "Posibles opciones:",
-    "",
-    ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
-    "",
-    "Escriba el número, el nombre completo o ajuste su texto."
-  ]);
+  return buildResponse(
+    appendCommandHint(
+      [
+        getAudienceLabel(selectedAudience),
+        "",
+        "❓ Detecté una ruta probable.",
+        "",
+        "Posibles opciones:",
+        "",
+        ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
+        "",
+        "Escriba el número, el nombre completo o ajuste su texto."
+      ],
+      MAIN_MENU_ID,
+      selectedAudience
+    )
+  );
 }
 
-function buildSystemMessage(message, selectedAudience) {
-  return buildResponse([
-    getAudienceLabel(selectedAudience),
-    "",
-    message
-  ]);
+function buildSystemMessage(message, selectedAudience, nodeId = MAIN_MENU_ID) {
+  return buildResponse(
+    appendCommandHint(
+      [
+        getAudienceLabel(selectedAudience),
+        "",
+        message
+      ],
+      nodeId,
+      selectedAudience
+    )
+  );
 }
 
 function tokenize(text = "") {
@@ -613,7 +647,7 @@ app.post("/chat", async (req, res) => {
       registerMatch(session, node.id, "menu");
       await saveSession();
       return res.json({
-        text: buildMenuMessage(node.label, children, selectedAudience)
+        text: buildMenuMessage(node, children, selectedAudience)
       });
     };
 
@@ -626,13 +660,19 @@ app.post("/chat", async (req, res) => {
       const rootChildren = getVisibleChildren(rootNode, nodes, "both");
 
       return res.json({
-        text: buildResponse([
-          "⏳ La sesión anterior se cerró por inactividad.",
-          "",
-          `📂 ${rootNode.label}`,
-          "",
-          ...formatOptions(rootChildren)
-        ])
+        text: buildResponse(
+          appendCommandHint(
+            [
+              "⏳ La sesión anterior se cerró por inactividad.",
+              "",
+              `📂 ${rootNode.label}`,
+              "",
+              ...formatOptions(rootChildren)
+            ],
+            rootNode.id,
+            "both"
+          )
+        )
       });
     }
 
@@ -654,13 +694,19 @@ app.post("/chat", async (req, res) => {
       await saveSession();
 
       return res.json({
-        text: buildResponse([
-          "🔄 Sesión reiniciada.",
-          "",
-          `📂 ${rootNode.label}`,
-          "",
-          ...formatOptions(rootChildren)
-        ])
+        text: buildResponse(
+          appendCommandHint(
+            [
+              "🔄 Sesión reiniciada.",
+              "",
+              `📂 ${rootNode.label}`,
+              "",
+              ...formatOptions(rootChildren)
+            ],
+            rootNode.id,
+            "both"
+          )
+        )
       });
     }
 
@@ -771,7 +817,7 @@ app.post("/chat", async (req, res) => {
 
           const nextChildren = getVisibleChildren(matched, nodes, session.audience || "both");
           return res.json({
-            text: buildMenuMessage(matched.label, nextChildren, session.audience || "both")
+            text: buildMenuMessage(matched, nextChildren, session.audience || "both")
           });
         }
 
@@ -848,15 +894,21 @@ app.post("/chat", async (req, res) => {
       const mainChildren = getVisibleChildren(mainMenu, nodes, session.audience);
 
       return res.json({
-        text: buildResponse([
-          getAudienceLabel(session.audience),
-          "",
-          `✅ Contexto confirmado: ${matched.label}.`,
-          "",
-          `📂 ${mainMenu.label}`,
-          "",
-          ...formatOptions(mainChildren)
-        ])
+        text: buildResponse(
+          appendCommandHint(
+            [
+              getAudienceLabel(session.audience),
+              "",
+              `✅ Contexto confirmado: ${matched.label}.`,
+              "",
+              `📂 ${mainMenu.label}`,
+              "",
+              ...formatOptions(mainChildren)
+            ],
+            mainMenu.id,
+            session.audience
+          )
+        )
       });
     }
 
@@ -868,7 +920,7 @@ app.post("/chat", async (req, res) => {
 
       const nextChildren = getVisibleChildren(matched, nodes, session.audience || "both");
       return res.json({
-        text: buildMenuMessage(matched.label, nextChildren, session.audience || "both")
+        text: buildMenuMessage(matched, nextChildren, session.audience || "both")
       });
     }
 
