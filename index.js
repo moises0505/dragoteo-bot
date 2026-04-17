@@ -404,6 +404,25 @@ function scoreNode(userText, node) {
   return bestScore;
 }
 
+function scoreCommandMatch(input, candidate) {
+  const normalizedInput = normalizeText(input);
+  const normalizedCandidate = normalizeText(candidate);
+
+  if (!normalizedInput || !normalizedCandidate) return 0;
+  if (normalizedInput === normalizedCandidate) return 100;
+
+  // Los comandos globales deben requerir más certeza que las opciones del menú.
+  // Así evitamos que fragmentos cortos como "ver" activen "volver".
+  if (normalizedInput.length >= 4 && normalizedCandidate.startsWith(normalizedInput)) return 90;
+
+  if (normalizedInput.length >= 5 && normalizedCandidate.length >= 6) {
+    const distance = getEditDistance(normalizedInput, normalizedCandidate);
+    if (distance === 1) return 84;
+  }
+
+  return 0;
+}
+
 function findCommandMatch(userText) {
   const normalized = normalizeText(userText);
   if (!normalized) return null;
@@ -411,13 +430,13 @@ function findCommandMatch(userText) {
   let best = { command: null, score: 0 };
 
   for (const [command, aliases] of Object.entries(COMMAND_ALIASES)) {
-    const score = Math.max(...aliases.map((alias) => scoreMatch(normalized, alias)), 0);
+    const score = Math.max(...aliases.map((alias) => scoreCommandMatch(normalized, alias)), 0);
     if (score > best.score) {
       best = { command, score };
     }
   }
 
-  return best.score >= 62 ? best.command : null;
+  return best.score >= 84 ? best.command : null;
 }
 
 function findMatchingOption(userText, children) {
