@@ -283,8 +283,18 @@ function buildSystemMessage(message, selectedAudience) {
   ]);
 }
 
+function tokenize(text = "") {
+  return normalizeText(text).split(" ").filter(Boolean);
+}
+
 function getNodeMatchTexts(node) {
   return [node.label, ...(Array.isArray(node.aliases) ? node.aliases : [])]
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+}
+
+function getNodeKeywords(node) {
+  return (Array.isArray(node.keywords) ? node.keywords : [])
     .map((value) => normalizeText(value))
     .filter(Boolean);
 }
@@ -344,6 +354,33 @@ function scoreMatch(input, candidate) {
   return 0;
 }
 
+function scoreNode(userText, node) {
+  const normalized = normalizeText(userText);
+  const texts = getNodeMatchTexts(node);
+  const keywords = getNodeKeywords(node);
+
+  const textScores = texts.map((candidate) => scoreMatch(normalized, candidate));
+  let bestScore = textScores.length ? Math.max(...textScores) : 0;
+
+  const inputTokens = tokenize(normalized);
+  const keywordMatches = keywords.filter((keyword) => {
+    const keywordTokens = tokenize(keyword);
+    return keywordTokens.some((token) =>
+      inputTokens.some((inputToken) => inputToken.startsWith(token) || token.startsWith(inputToken))
+    );
+  }).length;
+
+  if (keywordMatches > 0) {
+    bestScore = Math.max(bestScore, 40 + keywordMatches * 8);
+  }
+
+  if (texts.some((candidate) => candidate.includes(normalized) && normalized.length >= 4)) {
+    bestScore = Math.max(bestScore, 78);
+  }
+
+  return bestScore;
+}
+
 function findCommandMatch(userText) {
   const normalized = normalizeText(userText);
   if (!normalized) return null;
@@ -375,16 +412,28 @@ function findMatchingOption(userText, children) {
   const ranked = children
     .map((child) => ({
       child,
-      score: Math.max(...getNodeMatchTexts(child).map((candidate) => scoreMatch(normalized, candidate)), 0)
+      score: scoreNode(normalized, child)
     }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score >= 60)
     .sort((a, b) => b.score - a.score);
 
   if (!ranked.length) {
     return { match: null, ambiguous: false, suggestions: [] };
   }
 
+  if (ranked[0].score >= 85 && (!ranked[1] || ranked[0].score - ranked[1].score >= 5)) {
+    return { match: ranked[0].child, ambiguous: false, suggestions: [] };
+  }
+
   if (ranked.length > 1 && ranked[0].score === ranked[1].score && ranked[0].score < 100) {
+    return {
+      match: null,
+      ambiguous: true,
+      suggestions: ranked.slice(0, 3).map((item) => item.child.label)
+    };
+  }
+
+  if (ranked[0].score < 85) {
     return {
       match: null,
       ambiguous: true,
@@ -403,7 +452,7 @@ function findSuggestedOptions(userText, children) {
   return children
     .map((child) => ({
       child,
-      score: Math.max(...getNodeMatchTexts(child).map((candidate) => scoreMatch(normalized, candidate)), 0)
+      score: scoreNode(normalized, child)
     }))
     .filter((item) => item.score >= 45)
     .sort((a, b) => b.score - a.score)

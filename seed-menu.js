@@ -21,6 +21,14 @@ function addAliases(id, aliases) {
   nodes[id].aliases = aliases;
 }
 
+function addKeywords(id, keywords) {
+  if (!nodes[id]) {
+    throw new Error(`No existe el nodo para asignar keywords: ${id}`);
+  }
+
+  nodes[id].keywords = keywords;
+}
+
 function addAudienceOption(id, label, value) {
   nodes[id] = {
     id,
@@ -463,6 +471,62 @@ addAliases("alert_calendar", ["fechas clave", "calendario"]);
 addAliases("alert_changes", ["cambios recientes", "cambios"]);
 addAliases("alert_maintenance", ["mantenimiento", "incidencia"]);
 addAliases("alert_deadlines", ["pendientes", "urgente", "vencimiento"]);
+
+addKeywords("classes_menu", ["clase", "horario", "grupo", "materia"]);
+addKeywords("evaluation_menu", ["evaluacion", "parcial", "calificacion", "rubrica"]);
+addKeywords("spaces_menu", ["aula", "salon", "espacio", "classroom"]);
+addKeywords("requests_menu", ["solicitud", "formato", "tramite", "documento"]);
+addKeywords("rules_menu", ["reglamento", "lineamiento", "regla", "norma"]);
+addKeywords("support_menu", ["soporte", "incidencia", "problema", "error"]);
+addKeywords("contacts_menu", ["contacto", "directorio", "coordinacion", "area"]);
+addKeywords("alerts_menu", ["aviso", "cambio", "fecha", "mantenimiento"]);
+
+addKeywords("class_schedule", ["horario", "horarios", "agenda"]);
+addKeywords("class_groups", ["grupo", "grupos", "materia", "clase"]);
+addKeywords("class_assignment", ["asignacion", "asignadas", "carga"]);
+addKeywords("class_calendar", ["calendario", "fechas", "periodo"]);
+addKeywords("class_attendance", ["asistencia", "lista", "faltas"]);
+
+addKeywords("eval_grading", ["calificaciones", "captura", "notas"]);
+addKeywords("eval_rubrics", ["rubrica", "rubricas", "criterios"]);
+addKeywords("eval_partial_dates", ["parciales", "fecha", "fechas"]);
+addKeywords("eval_capture_errors", ["error", "captura", "falla"]);
+addKeywords("eval_records", ["actas", "reportes", "cierre"]);
+
+addKeywords("space_room", ["aula", "salon", "sede"]);
+addKeywords("space_change", ["cambio", "aula", "salon"]);
+addKeywords("space_virtual", ["classroom", "virtual", "acceso"]);
+addKeywords("space_resources", ["recurso", "equipo", "espacio"]);
+addKeywords("space_library", ["biblioteca", "sala", "prestamo"]);
+
+addKeywords("req_absence", ["ausencia", "permiso", "falta"]);
+addKeywords("req_documents", ["documentos", "datos", "actualizacion"]);
+addKeywords("req_constancy", ["constancia", "laboral"]);
+addKeywords("req_schedule_change", ["horario", "cambio"]);
+addKeywords("req_reports", ["formato", "reporte", "solicitud"]);
+
+addKeywords("rule_academic", ["academico", "academica", "norma"]);
+addKeywords("rule_evaluation", ["evaluacion", "criterio", "parcial"]);
+addKeywords("rule_attendance", ["asistencia", "faltas"]);
+addKeywords("rule_classroom", ["classroom", "plataforma"]);
+addKeywords("rule_period", ["cierres", "periodo", "fechas"]);
+
+addKeywords("support_technical", ["tecnico", "sistema", "error"]);
+addKeywords("support_academic", ["academico", "grupo", "materia"]);
+addKeywords("support_operations", ["operaciones", "horario", "aula"]);
+addKeywords("support_platforms", ["plataforma", "classroom", "acceso"]);
+addKeywords("urgent_support", ["urgente", "emergencia", "prioridad"]);
+
+addKeywords("contact_coordination", ["coordinacion", "academica"]);
+addKeywords("contact_operations", ["operaciones", "docentes"]);
+addKeywords("contact_support", ["soporte", "institucional"]);
+addKeywords("contact_directory", ["directorio", "contacto"]);
+addKeywords("contact_reports", ["seguimiento", "reporte"]);
+
+addKeywords("alert_calendar", ["fecha", "calendario", "clave"]);
+addKeywords("alert_changes", ["cambio", "nuevo", "reciente"]);
+addKeywords("alert_maintenance", ["mantenimiento", "incidencia"]);
+addKeywords("alert_deadlines", ["pendiente", "cierre", "vencimiento"]);
 
 function validateMenuStructure() {
   const requiredNodes = ["audience_selector", "main_menu", "support_menu", "contacts_menu"];
