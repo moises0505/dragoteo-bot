@@ -6,6 +6,8 @@ const db = new Firestore();
 
 app.use(express.json());
 
+// Si el usuario abandona la conversación, la sesión se reinicia para
+// evitar navegación sobre contexto viejo o ambiguo.
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 function normalizeText(text = "") {
@@ -22,6 +24,8 @@ function normalizeText(text = "") {
 }
 
 function getSessionId(body) {
+  // La sesión actual está acoplada a Google Chat: combina espacio y usuario
+  // para mantener conversaciones separadas dentro del canal.
   const space = body?.space?.name || "no-space";
   const user = body?.user?.name || "no-user";
   return `${space}__${user}`;
@@ -41,12 +45,16 @@ function getVisibleChildren(node, nodes, selectedAudience) {
     .map((id) => getNode(nodes, id))
     .filter(Boolean)
     .filter((child) => {
+      // Las opciones del selector inicial siempre deben verse; el resto
+      // se filtra según la audiencia elegida en la sesión.
       if (child.type === "audience_option") return true;
       return isVisibleForAudience(child.audience, selectedAudience);
     });
 }
 
 function buildMenuMessage(title, children, selectedAudience) {
+  // Se numeran las opciones para favorecer reconocimiento sobre memoria:
+  // el usuario puede responder con número, texto completo o fragmento.
   const numbered = children.map((child, index) => ({
     ...child,
     optionNumber: index + 1
@@ -90,6 +98,8 @@ function buildLeafMessage(node, selectedAudience) {
 
   const body =
     configured ||
+    // Mientras una hoja no tenga contenido definitivo en Firestore,
+    // el bot mantiene un fallback explícito en lugar de inventar respuestas.
     `📌 Por ahora esta es una respuesta temporal.\n🛠️ Aquí irá la respuesta configurada para esta duda.`;
 
   return `✅ Ya llegaste a la sección correcta: ${node.label}.\n\n${audienceLine}\n\n${body}\n\n↩️ Escribe "volver" para regresar, "inicio" para volver al menú principal o "reiniciar" para comenzar desde cero.`;
@@ -125,6 +135,8 @@ function findMatchingOption(userText, children) {
   if (!normalized) return { match: null, ambiguous: false, suggestions: [] };
 
   if (/^\d+$/.test(normalized)) {
+    // El número visible en menú tiene prioridad porque reduce ambigüedad
+    // y hace más fácil navegar desde móvil o chats rápidos.
     const index = Number(normalized) - 1;
     if (index >= 0 && index < children.length) {
       return { match: children[index], ambiguous: false, suggestions: [] };
@@ -186,6 +198,8 @@ app.post("/chat", async (req, res) => {
 
     const userText = normalizeText(incomingText);
 
+    // El runtime toma siempre el menú publicado desde Firestore para no
+    // depender de estructuras hardcodeadas dentro del backend.
     const menuDoc = await db.collection("publishedMenus").doc("main").get();
     if (!menuDoc.exists) {
       return res.json({ text: "No encontré el menú publicado." });
@@ -224,6 +238,8 @@ app.post("/chat", async (req, res) => {
     };
 
     if (sessionSnap.exists && isSessionExpired(session.updatedAt)) {
+      // Si la conversación expiró, se limpia el contexto para evitar que
+      // el usuario retome un nodo que ya no recuerde o que haya cambiado.
       session = createDefaultSession(rootNodeId);
       await saveSession();
 
@@ -323,6 +339,7 @@ app.post("/chat", async (req, res) => {
       userText === "hola" ||
       userText === "start"
     ) {
+      // El primer contacto y los saludos vuelven al punto de entrada guiado.
       if (!session.audience) {
         session.currentNodeId = rootNodeId;
         session.stack = [];
@@ -364,6 +381,8 @@ app.post("/chat", async (req, res) => {
     const result = findMatchingOption(userText, children);
 
     if (result.ambiguous) {
+      // El bot no adivina entre dos rutas similares: obliga a desambiguar
+      // para proteger la trazabilidad del flujo conversacional.
       return res.json({
         text:
           `🤔 Encontré varias opciones parecidas.\n\n` +
@@ -384,6 +403,7 @@ app.post("/chat", async (req, res) => {
     const matched = result.match;
 
     if (matched.type === "audience_option") {
+      // La audiencia elegida redefine qué ramas del árbol quedan visibles.
       session.audience = matched.value;
       session.currentNodeId = "main_menu";
       session.stack = ["main_menu"];
@@ -400,6 +420,8 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matched.type === "menu") {
+      // El stack conserva la ruta para soportar "volver" sin recalcular
+      // breadcrumbs ni depender de la estructura del canal.
       session.currentNodeId = matched.id;
       session.stack.push(matched.id);
       await saveSession();

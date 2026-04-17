@@ -4,16 +4,21 @@ const db = new Firestore();
 const nodes = {};
 
 function addMenu(id, label, children = [], audience = "both") {
+  // Nodo navegable: muestra opciones hijas y puede filtrarse por audiencia.
   nodes[id] = { id, label, type: "menu", audience, children };
 }
 
 function addLeaf(id, label, audience = "both", response = null) {
+  // Nodo terminal: representa una duda concreta. El contenido definitivo
+  // vive en `response` cuando ya fue redactado y validado.
   const node = { id, label, type: "leaf", audience };
   if (response) node.response = response;
   nodes[id] = node;
 }
 
 function addAudienceOption(id, label, value) {
+  // Opción especial del filtro inicial. No es una hoja de contenido:
+  // fija el contexto de audiencia antes de entrar al menú principal.
   nodes[id] = {
     id,
     label,
@@ -354,6 +359,8 @@ addLeaf("r_rep", "Reportes");
 ========================= */
 
 async function main() {
+  // Este script publica la versión editable del árbol como documento
+  // fuente para el runtime del bot en `publishedMenus/main`.
   const data = {
     name: "DRAGOTEO",
     status: "published",
@@ -363,6 +370,8 @@ async function main() {
     nodes
   };
 
+  // `set` reemplaza el documento completo, así que conviene ejecutarlo
+  // solo cuando ya se validó la estructura final del menú.
   await db.collection("publishedMenus").doc("main").set(data);
   console.log("✅ Documento publishedMenus/main actualizado correctamente.");
 }
