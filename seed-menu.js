@@ -4,21 +4,16 @@ const db = new Firestore();
 const nodes = {};
 
 function addMenu(id, label, children = [], audience = "both") {
-  // Nodo navegable: muestra opciones hijas y puede filtrarse por audiencia.
   nodes[id] = { id, label, type: "menu", audience, children };
 }
 
 function addLeaf(id, label, audience = "both", response = null) {
-  // Nodo terminal: representa una duda concreta. El contenido definitivo
-  // vive en `response` cuando ya fue redactado y validado.
   const node = { id, label, type: "leaf", audience };
   if (response) node.response = response;
   nodes[id] = node;
 }
 
 function addAudienceOption(id, label, value) {
-  // Opción especial del filtro inicial. No es una hoja de contenido:
-  // fija el contexto de audiencia antes de entrar al menú principal.
   nodes[id] = {
     id,
     label,
@@ -29,349 +24,409 @@ function addAudienceOption(id, label, value) {
 }
 
 /* =========================
-   FILTRO INICIAL
+   CONTEXTO INICIAL
 ========================= */
 
-addMenu("audience_selector", "👋 Antes de continuar, dime si tu duda es de:", [
+addMenu("audience_selector", "Seleccione su contexto docente", [
   "aud_prepa",
   "aud_universidad",
-  "aud_ambas"
+  "aud_ambas",
+  "aud_no_seguro"
 ]);
 
-addAudienceOption("aud_prepa", "🏫 Preparatoria", "prepa");
-addAudienceOption("aud_universidad", "🎓 Universidad", "universidad");
-addAudienceOption("aud_ambas", "🔀 Ambas", "ambas");
+addAudienceOption("aud_prepa", "Preparatoria", "prepa");
+addAudienceOption("aud_universidad", "Universidad", "universidad");
+addAudienceOption("aud_ambas", "Ambas", "ambas");
+addAudienceOption("aud_no_seguro", "No estoy seguro", "ambas");
 
 /* =========================
    MENÚ PRINCIPAL
 ========================= */
 
-addMenu("main_menu", "🧭 Menú principal", [
-  "m_academic",
-  "biblioteca",
-  "op_docentes",
-  "op_academicas",
-  "directorio",
-  "classroom",
-  "pap",
-  "reportes"
+addMenu("main_menu", "Ruta docente", [
+  "classes_menu",
+  "evaluation_menu",
+  "spaces_menu",
+  "requests_menu",
+  "rules_menu",
+  "support_menu",
+  "contacts_menu",
+  "alerts_menu"
 ]);
 
 /* =========================
-   ACADEMIC MANAGER
+   CLASES Y HORARIOS
 ========================= */
 
-addMenu("m_academic", "📘 Academic Manager", [
-  "m_ac1",
-  "m_grupos",
-  "m_asistencia",
-  "m_calificaciones",
-  "m_horarios",
-  "m_reportes_actas",
-  "m_noduda1"
+addMenu("classes_menu", "Clases y horarios", [
+  "class_schedule",
+  "class_groups",
+  "class_assignment",
+  "class_calendar",
+  "class_attendance"
 ]);
 
-addLeaf("m_ac1", "¿Cómo acceso a Academic Manager?");
-
-addMenu("m_grupos", "👥 Grupos", [
-  "m_gr1",
-  "m_gr2"
-]);
-
-addLeaf("m_gr1", "¿Cómo identificar mi grupo?");
-addLeaf("m_gr2", "¿Cómo saber si tengo asignado mi grupo?");
-
-addMenu("m_asistencia", "🗓️ Asistencia", [
-  "m_as1",
-  "m_as2",
-  "m_as3",
-  "m_as4"
-]);
-
-addLeaf("m_as1", "¿Cómo descargo mi lista de asistencia?");
-addLeaf("m_as2", "Lista de asistencia desactualizada o incongruente");
-addLeaf("m_as3", "¿Cómo capturo las faltas?");
-addLeaf("m_as4", "¿Cómo consulto las faltas?");
-
-addMenu("m_calificaciones", "📝 Calificaciones", [
-  "m_ca1",
-  "m_ca2",
-  "m_ca3"
-]);
-
-addLeaf("m_ca1", "Tipos de rúbrica");
-addLeaf("m_ca2", "Errores de captura");
-addLeaf("m_ca3", "¿Cómo capturar calificaciones?");
-
-addMenu("m_horarios", "🕒 Horarios", [
-  "m_ho1"
-]);
-
-addMenu("m_ho1", "¿Cómo veo mi horario de clases?", [
-  "m_ho1_a",
-  "m_ho1_b",
-  "m_ho1_c"
-]);
-
-addLeaf("m_ho1_a", "¿Cómo identifico mi salón?");
-addLeaf("m_ho1_b", "¿Cómo identifico el nombre de mi clase y grupo?");
-addLeaf("m_ho1_c", "Solicitud de cambio de horario");
-
-addMenu("m_reportes_actas", "📄 Reportes y actas", [
-  "m_re1",
-  "m_re2"
-]);
-
-addLeaf("m_re1", "¿Cómo genero actas académicas y las envío?");
-addLeaf("m_re2", "Tipos de reportes");
-
-addLeaf("m_noduda1", "¿No aparece tu duda? Elige esta opción");
+addLeaf(
+  "class_schedule",
+  "Ver horario docente",
+  "both",
+  "Revise su horario y grupo asignado.\nSi hay diferencia, escriba soporte."
+);
+addLeaf(
+  "class_groups",
+  "Identificar grupo y clase",
+  "both",
+  "Ubique materia, grupo y salón desde su horario activo."
+);
+addLeaf(
+  "class_assignment",
+  "Clases asignadas",
+  "both",
+  "Confirme carga docente y grupos vigentes.\nSi falta una clase, use soporte."
+);
+addLeaf(
+  "class_calendar",
+  "Calendario académico",
+  "both",
+  "Consulte fechas de clase, parciales y cierres del periodo."
+);
+addLeaf(
+  "class_attendance",
+  "Asistencia y seguimiento",
+  "both",
+  "Ubique pase de lista y seguimiento del grupo desde su ruta académica."
+);
 
 /* =========================
-   BIBLIOTECA
+   EVALUACIÓN Y PARCIALES
 ========================= */
 
-addMenu("biblioteca", "📚 Biblioteca y Nido Dragón", [
-  "b_prestamo",
-  "b_digital",
-  "b_salas",
-  "b_autores",
-  "b_noduda2"
+addMenu("evaluation_menu", "Evaluación y parciales", [
+  "eval_grading",
+  "eval_rubrics",
+  "eval_partial_dates",
+  "eval_capture_errors",
+  "eval_records"
 ]);
 
-addLeaf("b_prestamo", "Préstamo de libros");
-addLeaf("b_digital", "Biblioteca digital");
-addLeaf("b_salas", "Reservación de salas");
-addLeaf("b_autores", "Programa de Autores Mondragón");
-addLeaf("b_noduda2", "¿No aparece tu duda? Elige esta opción");
+addLeaf(
+  "eval_grading",
+  "Captura de calificaciones",
+  "both",
+  "Utilice la captura vigente del periodo.\nSi hay bloqueo, escriba soporte."
+);
+addLeaf(
+  "eval_rubrics",
+  "Rúbricas y criterios",
+  "both",
+  "Revise el tipo de rúbrica y el criterio aplicable al curso."
+);
+addLeaf(
+  "eval_partial_dates",
+  "Fechas de parciales",
+  "both",
+  "Consulte el calendario institucional del periodo antes de capturar."
+);
+addLeaf(
+  "eval_capture_errors",
+  "Errores de captura",
+  "both",
+  "Si la captura no coincide con el grupo o la materia, use soporte."
+);
+addLeaf(
+  "eval_records",
+  "Actas y reportes",
+  "both",
+  "Ubique la ruta institucional para reportes, actas y cierre académico."
+);
 
 /* =========================
-   OPERACIONES DOCENTES
+   AULAS Y ESPACIOS
 ========================= */
 
-addMenu("op_docentes", "👨‍🏫 Operaciones Docentes", [
-  "od_clases",
-  "od_ausencia",
-  "od_salon",
-  "od_nomina",
-  "od_datos",
-  "od_constancia",
-  "od_capacitacion",
-  "od_crono",
-  "od_noduda3"
+addMenu("spaces_menu", "Aulas y espacios", [
+  "space_room",
+  "space_change",
+  "space_virtual",
+  "space_resources",
+  "space_library"
 ]);
 
-addLeaf("od_clases", "Cómo sé qué clases se me asignaron");
-addLeaf("od_ausencia", "Solicitud de ausencia");
-addLeaf("od_salon", "Solicitud de cambio de salón");
-addLeaf("od_nomina", "Dudas sobre contratos y nómina");
-addLeaf("od_datos", "Actualización de datos y documentos");
-addLeaf("od_constancia", "Constancia laboral");
-addLeaf("od_capacitacion", "Capacitación docente");
-addLeaf("od_crono", "Cronograma de actividades docentes");
-addLeaf("od_noduda3", "¿No aparece tu duda? Elige esta opción");
+addLeaf(
+  "space_room",
+  "Aula asignada",
+  "both",
+  "Verifique salón y sede en su horario vigente."
+);
+addLeaf(
+  "space_change",
+  "Cambio de aula o espacio",
+  "both",
+  "Para un ajuste, siga la solicitud institucional de operaciones."
+);
+addLeaf(
+  "space_virtual",
+  "Aulas virtuales",
+  "both",
+  "Revise aula virtual, grupos y acceso a Classroom."
+);
+addLeaf(
+  "space_resources",
+  "Espacios y recursos",
+  "both",
+  "Solicite apoyo si requiere un espacio o recurso no disponible."
+);
+addLeaf(
+  "space_library",
+  "Biblioteca y salas",
+  "both",
+  "Consulte préstamo, salas y biblioteca digital desde esta ruta."
+);
 
 /* =========================
-   OPERACIONES ACADÉMICAS
+   FORMATOS Y SOLICITUDES
 ========================= */
 
-addMenu("op_academicas", "⚙️ Operaciones Académicas", [
-  "oa_correo",
-  "oa_veranos",
-  "oa_noduda4"
+addMenu("requests_menu", "Formatos y solicitudes", [
+  "req_absence",
+  "req_documents",
+  "req_constancy",
+  "req_schedule_change",
+  "req_reports"
 ]);
 
-addLeaf("oa_correo", "Correo electrónico institucional");
-addLeaf("oa_veranos", "Veranos");
-addLeaf("oa_noduda4", "¿No aparece tu duda? Elige esta opción");
+addLeaf(
+  "req_absence",
+  "Solicitud de ausencia",
+  "both",
+  "Use la vía institucional de operaciones docentes para ausencias."
+);
+addLeaf(
+  "req_documents",
+  "Actualización de datos y documentos",
+  "both",
+  "Prepare su solicitud con datos vigentes y soporte documental."
+);
+addLeaf(
+  "req_constancy",
+  "Constancia laboral",
+  "both",
+  "Solicite la constancia por la ruta institucional correspondiente."
+);
+addLeaf(
+  "req_schedule_change",
+  "Cambio de horario",
+  "both",
+  "Valide primero el impacto académico antes de solicitar un cambio."
+);
+addLeaf(
+  "req_reports",
+  "Formatos y reportes frecuentes",
+  "both",
+  "Ubique el formato correcto antes de enviar una solicitud."
+);
 
 /* =========================
-   DIRECTORIO
+   REGLAMENTOS Y LINEAMIENTOS
 ========================= */
 
-addMenu("directorio", "📇 Directorio de Academia", [
-  "dir_univ",
-  "dir_prepa",
-  "dir_noduda5"
+addMenu("rules_menu", "Reglamentos y lineamientos", [
+  "rule_academic",
+  "rule_evaluation",
+  "rule_attendance",
+  "rule_classroom",
+  "rule_period"
 ]);
 
-addMenu("dir_univ", "🎓 Universidad", [
-  "du_facultades",
-  "du_coords",
-  "du_opera",
-  "du_vice"
-], "universidad");
-
-addMenu("du_facultades", "🏛️ Direcciones de facultades", [
-  "du_f1",
-  "du_f2",
-  "du_f3",
-  "du_f4",
-  "du_f5",
-  "du_f6",
-  "du_f7"
-], "universidad");
-
-addLeaf("du_f1", "Negocios", "universidad");
-addLeaf("du_f2", "Psicología y Educación", "universidad");
-addLeaf("du_f3", "Contabilidad, Finanzas y Marketing", "universidad");
-addLeaf("du_f4", "Gastronomía, Nutrición y Turismo", "universidad");
-addLeaf("du_f5", "Ingeniería", "universidad");
-addLeaf("du_f6", "Diseño", "universidad");
-addLeaf("du_f7", "Derecho", "universidad");
-
-addMenu("du_coords", "🧩 Coordinaciones y asuntos", [
-  "du_c1",
-  "du_c2",
-  "du_c3",
-  "du_c4",
-  "du_c5"
-], "universidad");
-
-addLeaf("du_c1", "Asuntos Internacionales", "universidad");
-addLeaf("du_c2", "Alternancia", "universidad");
-addLeaf("du_c3", "Emprendizaje", "universidad");
-addLeaf("du_c4", "Inteligencia Artificial", "universidad");
-addLeaf("du_c5", "Proyecto de Vida", "universidad");
-
-addMenu("du_opera", "⚙️ Operaciones Acad. y Docentes", [
-  "du_o1",
-  "du_o2",
-  "du_o3",
-  "du_o4"
-], "universidad");
-
-addLeaf("du_o1", "Dirección de Operaciones", "universidad");
-addLeaf("du_o2", "Coord. de Operaciones Acad.", "universidad");
-addLeaf("du_o3", "Auxiliar de Operaciones Acad.", "universidad");
-addLeaf("du_o4", "Coord. de Operaciones Docentes", "universidad");
-
-addLeaf("du_vice", "Vicerrectoría", "universidad");
-
-addMenu("dir_prepa", "🏫 Preparatoria", [
-  "dp_g1",
-  "dp_g2",
-  "dp_g3",
-  "dp_umx",
-  "dp_op1",
-  "dp_op2"
-], "prepa");
-
-addLeaf("dp_g1", "Dirección de Generación 1 y 2", "prepa");
-addLeaf("dp_g2", "Dirección de Generación 3 y 4", "prepa");
-addLeaf("dp_g3", "Dirección de Generación 5 y 6", "prepa");
-addLeaf("dp_umx", "Dirección de Prepa UMX", "prepa");
-addLeaf("dp_op1", "Dir. de Operaciones Acad. y Docentes", "prepa");
-addLeaf("dp_op2", "Ejecutivo de Operaciones Acad. y Docentes", "prepa");
-
-addLeaf("dir_noduda5", "¿No aparece la persona? Elige esta opción");
+addLeaf(
+  "rule_academic",
+  "Lineamientos académicos",
+  "both",
+  "Consulte la norma académica vigente aplicable a su programa."
+);
+addLeaf(
+  "rule_evaluation",
+  "Lineamientos de evaluación",
+  "both",
+  "Revise criterios, parciales y cierre antes de capturar."
+);
+addLeaf(
+  "rule_attendance",
+  "Reglas de asistencia",
+  "both",
+  "Aplique la regla vigente del periodo y del nivel correspondiente."
+);
+addLeaf(
+  "rule_classroom",
+  "Uso de Classroom y plataformas",
+  "both",
+  "Consulte la ruta institucional para uso correcto de plataformas."
+);
+addLeaf(
+  "rule_period",
+  "Fechas y cierres del periodo",
+  "both",
+  "Revise fechas clave antes de cualquier ajuste o captura."
+);
 
 /* =========================
-   CLASSROOM
+   SOPORTE E INCIDENCIAS
 ========================= */
 
-addMenu("classroom", "💻 Classroom", [
-  "c_aulas",
-  "c_tutoriales",
-  "c_tareas",
-  "c_evaluacion",
-  "c_alumnos",
-  "c_tablon",
-  "c_noduda6"
+addMenu("support_menu", "Soporte e incidencias", [
+  "support_technical",
+  "support_academic",
+  "support_operations",
+  "support_platforms",
+  "urgent_support"
 ]);
 
-addMenu("c_aulas", "🏫 Aulas virtuales y grupos", [
-  "c_au1"
-]);
-
-addLeaf("c_au1", "No tengo asignados mis grupos");
-
-addMenu("c_tutoriales", "🎥 Tutoriales", [
-  "c_tu1",
-  "c_tu2",
-  "c_tu3"
-]);
-
-addLeaf("c_tu1", "Aulas y código de inscripción");
-addLeaf("c_tu2", "¿Cómo veo mis aulas virtuales?");
-addLeaf("c_tu3", "¿Cómo veo mi código de inscripción?");
-
-addMenu("c_tareas", "📌 Tareas y materiales", [
-  "c_ta1",
-  "c_ta2"
-]);
-
-addLeaf("c_ta1", "¿Cómo publicar y programar tareas?");
-addLeaf("c_ta2", "Tipos de tareas y materiales");
-
-addMenu("c_evaluacion", "📊 Evaluación y calificaciones", [
-  "c_ev1",
-  "c_ev2",
-  "c_ev3"
-]);
-
-addLeaf("c_ev1", "¿Cómo capturar calificaciones?");
-addLeaf("c_ev2", "¿Cómo descargar calificaciones?");
-addLeaf("c_ev3", "¿Cómo configurar una rúbrica?");
-
-addMenu("c_alumnos", "👩‍🎓 Alumnos", [
-  "c_al1",
-  "c_al2"
-]);
-
-addLeaf("c_al1", "¿Cómo veo a mis alumnos inscritos?");
-addLeaf("c_al2", "¿Cómo me comunico con un alumno?");
-
-addMenu("c_tablon", "📣 Tablón", [
-  "c_tb1",
-  "c_tb2"
-]);
-
-addLeaf("c_tb1", "¿Cómo uso el tablón de Classroom?");
-addLeaf("c_tb2", "¿Cómo programo un aviso?");
-
-addLeaf("c_noduda6", "¿No aparece tu duda? Elige esta opción");
+addLeaf(
+  "support_technical",
+  "Incidencia técnica",
+  "both",
+  "Si hay falla de acceso, captura o sistema, repórtela por soporte."
+);
+addLeaf(
+  "support_academic",
+  "Incidencia académica",
+  "both",
+  "Si afecta grupo, materia o evaluación, escale por la ruta académica."
+);
+addLeaf(
+  "support_operations",
+  "Soporte de operaciones",
+  "both",
+  "Si el tema es horario, aula o trámite, use operaciones docentes."
+);
+addLeaf(
+  "support_platforms",
+  "Soporte de plataformas",
+  "both",
+  "Para Classroom o herramientas digitales, documente la incidencia y escale."
+);
+addLeaf(
+  "urgent_support",
+  "Atención urgente",
+  "both",
+  "Escale de inmediato con su coordinación académica o soporte institucional."
+);
 
 /* =========================
-   PAP
+   CONTACTOS CLAVE
 ========================= */
 
-addMenu("pap", "🧠 Atención Psicológica (PAP)", [
-  "p_proceso"
+addMenu("contacts_menu", "Contactos clave", [
+  "contact_coordination",
+  "contact_operations",
+  "contact_support",
+  "contact_directory",
+  "contact_reports"
 ]);
 
-addLeaf("p_proceso", "Proceso y contacto");
+addLeaf(
+  "contact_coordination",
+  "Coordinación académica",
+  "both",
+  "Use esta ruta cuando el tema afecte grupo, materia, evaluación o calendario."
+);
+addLeaf(
+  "contact_operations",
+  "Operaciones docentes",
+  "both",
+  "Use esta ruta para horarios, aulas, ausencias o trámites."
+);
+addLeaf(
+  "contact_support",
+  "Soporte institucional",
+  "both",
+  "Use esta ruta para incidencias técnicas o bloqueos de plataforma."
+);
+addLeaf(
+  "contact_directory",
+  "Directorio institucional",
+  "both",
+  "Consulte directorio solo cuando necesite canalización específica."
+);
+addLeaf(
+  "contact_reports",
+  "Reportes y seguimiento",
+  "both",
+  "Si el tema requiere seguimiento formal, levante el reporte correspondiente."
+);
 
 /* =========================
-   REPORTES Y SUGERENCIAS
+   AVISOS IMPORTANTES
 ========================= */
 
-addMenu("reportes", "⚠️ Reportes y sugerencias", [
-  "r_sug",
-  "r_rep"
+addMenu("alerts_menu", "Avisos importantes", [
+  "alert_calendar",
+  "alert_changes",
+  "alert_maintenance",
+  "alert_deadlines"
 ]);
 
-addLeaf("r_sug", "Sugerencia");
-addLeaf("r_rep", "Reportes");
+addLeaf(
+  "alert_calendar",
+  "Fechas clave",
+  "both",
+  "Consulte parciales, cierres y fechas de entrega vigentes."
+);
+addLeaf(
+  "alert_changes",
+  "Cambios recientes",
+  "both",
+  "Revise cambios operativos o académicos comunicados para el periodo."
+);
+addLeaf(
+  "alert_maintenance",
+  "Mantenimientos e incidencias",
+  "both",
+  "Confirme si hay afectaciones activas en sistemas o plataformas."
+);
+addLeaf(
+  "alert_deadlines",
+  "Pendientes críticos",
+  "both",
+  "Revise cierres, capturas y entregables próximos del periodo."
+);
 
-/* =========================
-   GUARDAR
-========================= */
+function validateMenuStructure() {
+  const requiredNodes = ["audience_selector", "main_menu", "support_menu", "contacts_menu"];
+
+  for (const id of requiredNodes) {
+    if (!nodes[id]) {
+      throw new Error(`Falta el nodo requerido: ${id}`);
+    }
+  }
+
+  for (const node of Object.values(nodes)) {
+    if (!["menu", "leaf", "audience_option"].includes(node.type)) {
+      throw new Error(`Tipo de nodo inválido en ${node.id}`);
+    }
+
+    if (node.type === "menu") {
+      for (const childId of node.children || []) {
+        if (!nodes[childId]) {
+          throw new Error(`El nodo ${node.id} referencia un hijo inexistente: ${childId}`);
+        }
+      }
+    }
+  }
+}
 
 async function main() {
-  // Este script publica la versión editable del árbol como documento
-  // fuente para el runtime del bot en `publishedMenus/main`.
+  validateMenuStructure();
+
   const data = {
-    name: "DRAGOTEO",
+    name: "DragoTeo 🐉",
     status: "published",
-    version: 2,
-    welcomeMessage: "Hola, soy DRAGOTEO. Vamos a ubicar tu duda paso a paso.",
+    version: 3,
+    welcomeMessage: "Seleccione una ruta docente.",
     rootNodeId: "audience_selector",
     nodes
   };
 
-  // `set` reemplaza el documento completo, así que conviene ejecutarlo
-  // solo cuando ya se validó la estructura final del menú.
   await db.collection("publishedMenus").doc("main").set(data);
   console.log("✅ Documento publishedMenus/main actualizado correctamente.");
 }

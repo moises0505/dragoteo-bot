@@ -6,9 +6,14 @@ const db = new Firestore();
 
 app.use(express.json());
 
-// Si el usuario abandona la conversación, la sesión se reinicia para
-// evitar navegación sobre contexto viejo o ambiguo.
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+const BRAND = "DragoTeo 🐉 | Universidad Mondragón México";
+const SIGNATURE = "— DragoTeo 🐉";
+const ROOT_NODE_ID = "audience_selector";
+const MAIN_MENU_ID = "main_menu";
+const SUPPORT_MENU_ID = "support_menu";
+const CONTACT_MENU_ID = "contacts_menu";
+const URGENT_LEAF_ID = "urgent_support";
 
 function normalizeText(text = "") {
   return text
@@ -24,11 +29,72 @@ function normalizeText(text = "") {
 }
 
 function getSessionId(body) {
-  // La sesión actual está acoplada a Google Chat: combina espacio y usuario
-  // para mantener conversaciones separadas dentro del canal.
   const space = body?.space?.name || "no-space";
   const user = body?.user?.name || "no-user";
   return `${space}__${user}`;
+}
+
+function createEmptyMetrics() {
+  return {
+    commandCount: 0,
+    menuViews: 0,
+    leafViews: 0,
+    fallbackCount: 0,
+    ambiguousCount: 0,
+    restartCount: 0,
+    supportCount: 0,
+    contactCount: 0,
+    urgentCount: 0,
+    unrecognizedCount: 0,
+    lastCommand: null,
+    lastMatchedNodeId: null,
+    lastUnrecognizedInput: null
+  };
+}
+
+function createDefaultSession(rootNodeId) {
+  return {
+    audience: null,
+    currentNodeId: rootNodeId,
+    stack: [],
+    updatedAt: new Date().toISOString(),
+    metrics: createEmptyMetrics()
+  };
+}
+
+function mergeMetrics(savedMetrics = {}) {
+  return {
+    ...createEmptyMetrics(),
+    ...savedMetrics
+  };
+}
+
+function bumpMetric(session, key, amount = 1) {
+  session.metrics[key] = (session.metrics[key] || 0) + amount;
+}
+
+function registerCommand(session, command) {
+  bumpMetric(session, "commandCount");
+  session.metrics.lastCommand = command;
+}
+
+function registerFallback(session, input) {
+  bumpMetric(session, "fallbackCount");
+  bumpMetric(session, "unrecognizedCount");
+  session.metrics.lastUnrecognizedInput = input || null;
+}
+
+function registerMatch(session, nodeId, type) {
+  session.metrics.lastMatchedNodeId = nodeId;
+  if (type === "menu") bumpMetric(session, "menuViews");
+  if (type === "leaf") bumpMetric(session, "leafViews");
+}
+
+function isSessionExpired(updatedAt) {
+  if (!updatedAt) return false;
+  const last = new Date(updatedAt).getTime();
+  if (Number.isNaN(last)) return false;
+  return Date.now() - last > SESSION_TIMEOUT_MS;
 }
 
 function isVisibleForAudience(nodeAudience = "both", selectedAudience = "both") {
@@ -41,68 +107,82 @@ function getNode(nodes, id) {
 }
 
 function getVisibleChildren(node, nodes, selectedAudience) {
-  return (node.children || [])
+  return (node?.children || [])
     .map((id) => getNode(nodes, id))
     .filter(Boolean)
     .filter((child) => {
-      // Las opciones del selector inicial siempre deben verse; el resto
-      // se filtra según la audiencia elegida en la sesión.
       if (child.type === "audience_option") return true;
       return isVisibleForAudience(child.audience, selectedAudience);
     });
 }
 
+function getAudienceLabel(selectedAudience) {
+  if (selectedAudience === "prepa") return "Contexto: Preparatoria";
+  if (selectedAudience === "universidad") return "Contexto: Universidad";
+  if (selectedAudience === "ambas") return "Contexto: Preparatoria y Universidad";
+  return "Contexto: Sin definir";
+}
+
+function buildResponse(lines) {
+  return [BRAND, ...lines.filter(Boolean), SIGNATURE].join("\n");
+}
+
 function buildMenuMessage(title, children, selectedAudience) {
-  // Se numeran las opciones para favorecer reconocimiento sobre memoria:
-  // el usuario puede responder con número, texto completo o fragmento.
-  const numbered = children.map((child, index) => ({
-    ...child,
-    optionNumber: index + 1
-  }));
+  const numbered = children.map((child, index) => `${index + 1}. ${child.label}`);
 
-  const general = numbered.filter((c) => (c.audience || "both") === "both");
-  const uni = numbered.filter((c) => c.audience === "universidad");
-  const prepa = numbered.filter((c) => c.audience === "prepa");
-
-  let body = `${title}\n\n`;
-
-  if (selectedAudience === "ambas" && (uni.length || prepa.length)) {
-    if (general.length) {
-      body += `🌐 Generales:\n${general.map((c) => `${c.optionNumber}. ${c.label}`).join("\n")}\n\n`;
-    }
-    if (uni.length) {
-      body += `🎓 Universidad:\n${uni.map((c) => `${c.optionNumber}. ${c.label}`).join("\n")}\n\n`;
-    }
-    if (prepa.length) {
-      body += `🏫 Preparatoria:\n${prepa.map((c) => `${c.optionNumber}. ${c.label}`).join("\n")}\n\n`;
-    }
-  } else {
-    body += `Opciones disponibles:\n${numbered.map((c) => `${c.optionNumber}. ${c.label}`).join("\n")}\n\n`;
-  }
-
-  body += `✍️ Puedes escribir el número, el nombre o una parte del nombre.\n`;
-  body += `↩️ También puedes escribir "volver", "menú", "inicio", "reiniciar" o "ayuda".`;
-
-  return body;
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    `Menú: ${title}`,
+    ...numbered,
+    "Comandos: menú, volver, ayuda"
+  ]);
 }
 
 function buildLeafMessage(node, selectedAudience) {
   const configured = node.response?.trim();
 
-  let audienceLine = "🌐 Esta ruta aplica de forma general.";
-  if (node.audience === "prepa") audienceLine = "🏫 Esta ruta corresponde a Preparatoria.";
-  if (node.audience === "universidad") audienceLine = "🎓 Esta ruta corresponde a Universidad.";
-  if (selectedAudience === "ambas" && node.audience === "both") {
-    audienceLine = "🔀 Esta ruta aplica tanto a Preparatoria como a Universidad.";
-  }
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    `Tema: ${node.label}`,
+    configured || "Ruta sin respuesta cerrada. Use soporte, contacto o menú."
+  ]);
+}
 
-  const body =
-    configured ||
-    // Mientras una hoja no tenga contenido definitivo en Firestore,
-    // el bot mantiene un fallback explícito en lugar de inventar respuestas.
-    `📌 Por ahora esta es una respuesta temporal.\n🛠️ Aquí irá la respuesta configurada para esta duda.`;
+function buildHelpMessage() {
+  return buildResponse([
+    "Use el número o el nombre de una opción.",
+    "Comandos: menú, inicio, volver, reiniciar, ayuda.",
+    "Atajos: soporte, contacto, urgente."
+  ]);
+}
 
-  return `✅ Ya llegaste a la sección correcta: ${node.label}.\n\n${audienceLine}\n\n${body}\n\n↩️ Escribe "volver" para regresar, "inicio" para volver al menú principal o "reiniciar" para comenzar desde cero.`;
+function buildFallbackMessage(node, children, selectedAudience) {
+  const suggestions = children
+    .slice(0, 4)
+    .map((child, index) => `${index + 1}. ${child.label}`);
+
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    `No ubiqué esa opción en: ${node.label}.`,
+    ...suggestions,
+    "Use menú, inicio o ayuda."
+  ]);
+}
+
+function buildAmbiguousMessage(suggestions, selectedAudience) {
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    "Ubico más de una ruta posible.",
+    ...suggestions.map((item, index) => `${index + 1}. ${item}`),
+    "Escriba el número o el nombre más completo."
+  ]);
+}
+
+function buildSystemMessage(message, selectedAudience) {
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    message
+  ]);
 }
 
 function scoreMatch(input, label) {
@@ -135,8 +215,6 @@ function findMatchingOption(userText, children) {
   if (!normalized) return { match: null, ambiguous: false, suggestions: [] };
 
   if (/^\d+$/.test(normalized)) {
-    // El número visible en menú tiene prioridad porque reduce ambigüedad
-    // y hace más fácil navegar desde móvil o chats rápidos.
     const index = Number(normalized) - 1;
     if (index >= 0 && index < children.length) {
       return { match: children[index], ambiguous: false, suggestions: [] };
@@ -166,22 +244,6 @@ function findMatchingOption(userText, children) {
   return { match: ranked[0].child, ambiguous: false, suggestions: [] };
 }
 
-function createDefaultSession(rootNodeId) {
-  return {
-    audience: null,
-    currentNodeId: rootNodeId,
-    stack: [],
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function isSessionExpired(updatedAt) {
-  if (!updatedAt) return false;
-  const last = new Date(updatedAt).getTime();
-  if (Number.isNaN(last)) return false;
-  return Date.now() - last > SESSION_TIMEOUT_MS;
-}
-
 app.get("/", (req, res) => {
   res.send("DRAGOTEO está vivo.");
 });
@@ -198,16 +260,19 @@ app.post("/chat", async (req, res) => {
 
     const userText = normalizeText(incomingText);
 
-    // El runtime toma siempre el menú publicado desde Firestore para no
-    // depender de estructuras hardcodeadas dentro del backend.
     const menuDoc = await db.collection("publishedMenus").doc("main").get();
     if (!menuDoc.exists) {
-      return res.json({ text: "No encontré el menú publicado." });
+      return res.json({
+        text: buildResponse([
+          "No localicé el menú institucional publicado.",
+          "Solicite validación del despliegue."
+        ])
+      });
     }
 
     const config = menuDoc.data();
     const nodes = config.nodes || {};
-    const rootNodeId = config.rootNodeId || "audience_selector";
+    const rootNodeId = config.rootNodeId || ROOT_NODE_ID;
 
     const sessionId = getSessionId(body);
     const sessionRef = db.collection("chatSessions").doc(sessionId);
@@ -221,7 +286,8 @@ app.post("/chat", async (req, res) => {
         audience: saved.audience || null,
         currentNodeId: saved.currentNodeId || rootNodeId,
         stack: Array.isArray(saved.stack) ? saved.stack : [],
-        updatedAt: saved.updatedAt || null
+        updatedAt: saved.updatedAt || null,
+        metrics: mergeMetrics(saved.metrics)
       };
     }
 
@@ -231,105 +297,122 @@ app.post("/chat", async (req, res) => {
           audience: session.audience,
           currentNodeId: session.currentNodeId,
           stack: session.stack,
+          metrics: session.metrics,
           updatedAt: new Date().toISOString()
         },
         { merge: true }
       );
     };
 
+    const openMenu = async (nodeId, selectedAudience = session.audience || "both") => {
+      const node = getNode(nodes, nodeId) || getNode(nodes, rootNodeId);
+      const children = getVisibleChildren(node, nodes, selectedAudience);
+      registerMatch(session, node.id, "menu");
+      await saveSession();
+      return res.json({
+        text: buildMenuMessage(node.label, children, selectedAudience)
+      });
+    };
+
     if (sessionSnap.exists && isSessionExpired(session.updatedAt)) {
-      // Si la conversación expiró, se limpia el contexto para evitar que
-      // el usuario retome un nodo que ya no recuerde o que haya cambiado.
       session = createDefaultSession(rootNodeId);
+      bumpMetric(session, "restartCount");
       await saveSession();
 
       const rootNode = getNode(nodes, rootNodeId);
       const rootChildren = getVisibleChildren(rootNode, nodes, "both");
 
       return res.json({
-        text:
-          `⏳ La conversación anterior se cerró automáticamente por falta de respuesta.\n\n` +
-          `Vamos a comenzar de nuevo.\n\n` +
-          buildMenuMessage(rootNode.label, rootChildren, "both")
+        text: buildResponse([
+          "La sesión anterior se cerró por inactividad.",
+          `Menú: ${rootNode.label}`,
+          ...rootChildren.map((child, index) => `${index + 1}. ${child.label}`)
+        ])
       });
     }
 
     if (userText === "ayuda") {
-      return res.json({
-        text:
-          `🧭 Puedes navegar escribiendo una opción.\n\n` +
-          `También puedes usar:\n` +
-          `• el número de la opción\n` +
-          `• el nombre completo\n` +
-          `• una parte del nombre\n\n` +
-          `Comandos disponibles:\n` +
-          `• inicio\n` +
-          `• menú\n` +
-          `• volver\n` +
-          `• reiniciar\n` +
-          `• ayuda`
-      });
+      registerCommand(session, "ayuda");
+      await saveSession();
+      return res.json({ text: buildHelpMessage() });
     }
 
     if (userText === "reiniciar") {
       session = createDefaultSession(rootNodeId);
-      await saveSession();
-
+      bumpMetric(session, "restartCount");
+      registerCommand(session, "reiniciar");
       const rootNode = getNode(nodes, rootNodeId);
       const rootChildren = getVisibleChildren(rootNode, nodes, "both");
+      await saveSession();
 
       return res.json({
-        text:
-          `🔄 He reiniciado la conversación.\n\n` +
-          `Vamos a comenzar desde cero.\n\n` +
-          buildMenuMessage(rootNode.label, rootChildren, "both")
+        text: buildResponse([
+          "Sesión reiniciada.",
+          `Menú: ${rootNode.label}`,
+          ...rootChildren.map((child, index) => `${index + 1}. ${child.label}`)
+        ])
       });
     }
 
     if (userText === "inicio") {
+      registerCommand(session, "inicio");
       if (session.audience) {
-        session.currentNodeId = "main_menu";
-        session.stack = ["main_menu"];
-      } else {
-        session.currentNodeId = rootNodeId;
-        session.stack = [];
+        session.currentNodeId = MAIN_MENU_ID;
+        session.stack = [MAIN_MENU_ID];
+        return openMenu(MAIN_MENU_ID, session.audience);
       }
 
-      await saveSession();
-
-      const node = getNode(nodes, session.currentNodeId);
-      const children = getVisibleChildren(node, nodes, session.audience || "both");
-      return res.json({
-        text: buildMenuMessage(node.label, children, session.audience || "both")
-      });
+      session.currentNodeId = rootNodeId;
+      session.stack = [];
+      return openMenu(rootNodeId, "both");
     }
 
     if (userText === "menu" || userText === "menus" || userText === "menú") {
+      registerCommand(session, "menu");
       const node = getNode(nodes, session.currentNodeId) || getNode(nodes, rootNodeId);
-      const children = getVisibleChildren(node, nodes, session.audience || "both");
-      return res.json({
-        text: buildMenuMessage(node.label, children, session.audience || "both")
-      });
+      return openMenu(node.id, session.audience || "both");
     }
 
     if (userText === "volver") {
+      registerCommand(session, "volver");
       if (session.stack.length > 1) {
         session.stack.pop();
         session.currentNodeId = session.stack[session.stack.length - 1];
       } else if (session.audience) {
-        session.currentNodeId = "main_menu";
-        session.stack = ["main_menu"];
+        session.currentNodeId = MAIN_MENU_ID;
+        session.stack = [MAIN_MENU_ID];
       } else {
         session.currentNodeId = rootNodeId;
         session.stack = [];
       }
 
-      await saveSession();
+      return openMenu(session.currentNodeId, session.audience || "both");
+    }
 
-      const node = getNode(nodes, session.currentNodeId);
-      const children = getVisibleChildren(node, nodes, session.audience || "both");
+    if (userText === "soporte") {
+      registerCommand(session, "soporte");
+      bumpMetric(session, "supportCount");
+      session.currentNodeId = SUPPORT_MENU_ID;
+      session.stack = [MAIN_MENU_ID, SUPPORT_MENU_ID];
+      return openMenu(SUPPORT_MENU_ID, session.audience || "both");
+    }
+
+    if (userText === "contacto") {
+      registerCommand(session, "contacto");
+      bumpMetric(session, "contactCount");
+      session.currentNodeId = CONTACT_MENU_ID;
+      session.stack = [MAIN_MENU_ID, CONTACT_MENU_ID];
+      return openMenu(CONTACT_MENU_ID, session.audience || "both");
+    }
+
+    if (userText === "urgente") {
+      registerCommand(session, "urgente");
+      bumpMetric(session, "urgentCount");
+      const urgentNode = getNode(nodes, URGENT_LEAF_ID);
+      registerMatch(session, urgentNode?.id || URGENT_LEAF_ID, "leaf");
+      await saveSession();
       return res.json({
-        text: buildMenuMessage(node.label, children, session.audience || "both")
+        text: buildLeafMessage(urgentNode, session.audience || "both")
       });
     }
 
@@ -339,91 +422,70 @@ app.post("/chat", async (req, res) => {
       userText === "hola" ||
       userText === "start"
     ) {
-      // El primer contacto y los saludos vuelven al punto de entrada guiado.
       if (!session.audience) {
         session.currentNodeId = rootNodeId;
         session.stack = [];
-        await saveSession();
-
-        const node = getNode(nodes, rootNodeId);
-        const children = getVisibleChildren(node, nodes, "both");
-        return res.json({
-          text: buildMenuMessage(node.label, children, "both")
-        });
+        return openMenu(rootNodeId, "both");
       }
 
-      session.currentNodeId = "main_menu";
-      session.stack = ["main_menu"];
-      await saveSession();
-
-      const node = getNode(nodes, "main_menu");
-      const children = getVisibleChildren(node, nodes, session.audience);
-      return res.json({
-        text: buildMenuMessage(node.label, children, session.audience)
-      });
+      session.currentNodeId = MAIN_MENU_ID;
+      session.stack = [MAIN_MENU_ID];
+      return openMenu(MAIN_MENU_ID, session.audience);
     }
 
     const node = getNode(nodes, session.currentNodeId) || getNode(nodes, rootNodeId);
 
     if (node.type !== "menu") {
-      session.currentNodeId = session.audience ? "main_menu" : rootNodeId;
-      session.stack = session.audience ? ["main_menu"] : [];
-      await saveSession();
-
-      const resetNode = getNode(nodes, session.currentNodeId);
-      const children = getVisibleChildren(resetNode, nodes, session.audience || "both");
-      return res.json({
-        text: buildMenuMessage(resetNode.label, children, session.audience || "both")
-      });
+      session.currentNodeId = session.audience ? MAIN_MENU_ID : rootNodeId;
+      session.stack = session.audience ? [MAIN_MENU_ID] : [];
+      return openMenu(session.currentNodeId, session.audience || "both");
     }
 
     const children = getVisibleChildren(node, nodes, session.audience || "both");
     const result = findMatchingOption(userText, children);
 
     if (result.ambiguous) {
-      // El bot no adivina entre dos rutas similares: obliga a desambiguar
-      // para proteger la trazabilidad del flujo conversacional.
+      bumpMetric(session, "ambiguousCount");
+      await saveSession();
       return res.json({
-        text:
-          `🤔 Encontré varias opciones parecidas.\n\n` +
-          `Quizá quisiste decir:\n` +
-          result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n") +
-          `\n\n✍️ Escribe el nombre más completo o el número de la opción correcta.`
+        text: buildAmbiguousMessage(result.suggestions, session.audience || "both")
       });
     }
 
     if (!result.match) {
+      registerFallback(session, incomingText);
+      await saveSession();
       return res.json({
-        text:
-          `🤔 No encontré esa opción en la sección actual.\n\n` +
-          buildMenuMessage(node.label, children, session.audience || "both")
+        text: buildFallbackMessage(node, children, session.audience || "both")
       });
     }
 
     const matched = result.match;
 
     if (matched.type === "audience_option") {
-      // La audiencia elegida redefine qué ramas del árbol quedan visibles.
+      registerMatch(session, matched.id, "menu");
       session.audience = matched.value;
-      session.currentNodeId = "main_menu";
-      session.stack = ["main_menu"];
+      session.currentNodeId = MAIN_MENU_ID;
+      session.stack = [MAIN_MENU_ID];
       await saveSession();
 
-      const mainMenu = getNode(nodes, "main_menu");
+      const mainMenu = getNode(nodes, MAIN_MENU_ID);
       const mainChildren = getVisibleChildren(mainMenu, nodes, session.audience);
 
       return res.json({
-        text:
-          `✅ Perfecto. A partir de ahora te mostraré opciones para: ${matched.label}.\n\n` +
-          buildMenuMessage(mainMenu.label, mainChildren, session.audience)
+        text: buildResponse([
+          getAudienceLabel(session.audience),
+          `Contexto confirmado: ${matched.label}.`,
+          `Menú: ${mainMenu.label}`,
+          ...mainChildren.map((child, index) => `${index + 1}. ${child.label}`)
+        ])
       });
     }
 
     if (matched.type === "menu") {
-      // El stack conserva la ruta para soportar "volver" sin recalcular
-      // breadcrumbs ni depender de la estructura del canal.
       session.currentNodeId = matched.id;
       session.stack.push(matched.id);
+      registerMatch(session, matched.id, "menu");
       await saveSession();
 
       const nextChildren = getVisibleChildren(matched, nodes, session.audience || "both");
@@ -433,19 +495,25 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matched.type === "leaf") {
+      registerMatch(session, matched.id, "leaf");
       await saveSession();
       return res.json({
         text: buildLeafMessage(matched, session.audience || "both")
       });
     }
 
+    registerFallback(session, incomingText);
+    await saveSession();
     return res.json({
-      text: "⚠️ La opción seleccionada no tiene una acción válida."
+      text: buildSystemMessage("La ruta seleccionada no está disponible.", session.audience || "both")
     });
   } catch (error) {
     console.error(error);
     return res.json({
-      text: "⚠️ Ocurrió un error al procesar tu solicitud."
+      text: buildResponse([
+        "Ocurrió un error al procesar la solicitud.",
+        "Use menú o contacte soporte."
+      ])
     });
   }
 });

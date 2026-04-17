@@ -1,8 +1,8 @@
-# DRAGOTEO / DRAGOBOT
+# DragoTeo 🐉 / DRAGOBOT
 
 Backend conversacional para un chatbot orientado a Operaciones Académicas y Docentes.
 
-Hoy opera sobre Google Chat, con Firestore como fuente de verdad y un menú conversacional guiado como núcleo del sistema. La prioridad actual del proyecto no es una IA abierta, sino una navegación clara, controlada y trazable que reduzca ambigüedad y prepare una evolución futura hacia WhatsApp y una capa de IA con guardrails.
+Hoy opera sobre Google Chat, con Firestore como fuente de verdad y un menú conversacional guiado como núcleo del sistema. La prioridad actual del proyecto no es una IA abierta, sino una navegación clara, controlada y trazable para docentes, con respuestas breves y una evolución futura hacia WhatsApp y una capa de IA con guardrails.
 
 ## Estado Actual Del Proyecto
 
@@ -62,6 +62,8 @@ Las decisiones del proyecto deben favorecer:
 5. Resuelve navegación por número, texto completo o fragmento.
 6. Responde con el siguiente menú o con una hoja terminal.
 
+El menú actual está organizado por tareas docentes, no por organigrama interno.
+
 ## Modelo Conversacional
 
 El árbol del menú se publica en Firestore como un mapa de nodos.
@@ -91,6 +93,9 @@ El backend actual reconoce:
 - `menus`
 - `volver`
 - `reiniciar`
+- `soporte`
+- `contacto`
+- `urgente`
 
 También interpreta como arranque:
 
