@@ -256,8 +256,8 @@ function buildHelpMessage() {
 function buildFallbackMessage(node, children, selectedAudience, userText) {
   const likely = findSuggestedOptions(userText, children);
   const suggestionsSource = likely.length
-    ? likely
-    : children.slice(0, 4).map((child) => child.label);
+    ? likely.map((child) => `${getNodeIcon(child)} ${child.label}`)
+    : children.slice(0, 4).map((child) => `${getNodeIcon(child)} ${child.label}`);
   const suggestions = suggestionsSource.map((label, index) => `${index + 1}. ${label}`);
 
   return buildResponse([
@@ -278,7 +278,7 @@ function buildAmbiguousMessage(suggestions, selectedAudience) {
     "",
     "⚠️ Ubico más de una ruta posible.",
     "",
-    ...suggestions.map((item, index) => `${index + 1}. ${item}`),
+    ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
     "",
     "Escriba el número o el nombre más completo."
   ]);
@@ -292,7 +292,7 @@ function buildConfirmationMessage(suggestions, selectedAudience) {
     "",
     "Posibles opciones:",
     "",
-    ...suggestions.map((item, index) => `${index + 1}. ${item.label}`),
+    ...suggestions.map((item, index) => `${index + 1}. ${getNodeIcon(item)} ${item.label}`),
     "",
     "Escriba el número, el nombre completo o ajuste su texto."
   ]);
@@ -480,7 +480,7 @@ function findMatchingOption(userText, children) {
     return {
       match: null,
       ambiguous: true,
-      suggestions: ranked.slice(0, 3).map((item) => item.child.label),
+      suggestions: ranked.slice(0, 3).map((item) => item.child),
       needsConfirmation: false
     };
   }
@@ -489,7 +489,7 @@ function findMatchingOption(userText, children) {
     return {
       match: null,
       ambiguous: true,
-      suggestions: ranked.slice(0, 3).map((item) => item.child.label),
+      suggestions: ranked.slice(0, 3).map((item) => item.child),
       needsConfirmation: false
     };
   }
@@ -507,10 +507,10 @@ function findSuggestedOptions(userText, children) {
       child,
       score: scoreNode(normalized, child)
     }))
-    .filter((item) => item.score >= 45)
+    .filter((item) => item.score >= 35)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
-    .map((item) => item.child.label);
+    .map((item) => item.child);
 }
 
 app.get("/", (req, res) => {
@@ -770,7 +770,7 @@ app.post("/chat", async (req, res) => {
     if (result.ambiguous) {
       bumpMetric(session, "ambiguousCount");
       session.pendingSuggestions = result.suggestions
-        .map((label) => children.find((child) => child.label === label)?.id)
+        .map((child) => child?.id)
         .filter(Boolean);
       session.pendingInput = incomingText;
       session.pendingNodeId = node.id;
