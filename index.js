@@ -13,6 +13,16 @@ const MAIN_MENU_ID = "main_menu";
 const SUPPORT_MENU_ID = "support_menu";
 const CONTACT_MENU_ID = "contacts_menu";
 const URGENT_LEAF_ID = "urgent_support";
+const COMMAND_ALIASES = {
+  ayuda: ["ayuda", "ayud", "help", "apoyo"],
+  reiniciar: ["reiniciar", "reinicia", "reinicio", "reset"],
+  inicio: ["inicio", "iniciar", "empezar", "comenzar", "home"],
+  menu: ["menu", "menú", "menus", "opciones", "opcion", "men"],
+  volver: ["volver", "regresar", "atras", "atrás", "retroceder", "volverr"],
+  soporte: ["soporte", "soport", "ayuda tecnica", "problema", "incidencia"],
+  contacto: ["contacto", "contact", "contactos", "directorio", "coordi"],
+  urgente: ["urgente", "urgent", "emergencia", "prioridad"]
+};
 
 function normalizeText(text = "") {
   return text
@@ -334,6 +344,22 @@ function scoreMatch(input, candidate) {
   return 0;
 }
 
+function findCommandMatch(userText) {
+  const normalized = normalizeText(userText);
+  if (!normalized) return null;
+
+  let best = { command: null, score: 0 };
+
+  for (const [command, aliases] of Object.entries(COMMAND_ALIASES)) {
+    const score = Math.max(...aliases.map((alias) => scoreMatch(normalized, alias)), 0);
+    if (score > best.score) {
+      best = { command, score };
+    }
+  }
+
+  return best.score >= 62 ? best.command : null;
+}
+
 function findMatchingOption(userText, children) {
   const normalized = normalizeText(userText);
 
@@ -474,13 +500,15 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    if (userText === "ayuda") {
+    const matchedCommand = findCommandMatch(userText);
+
+    if (matchedCommand === "ayuda") {
       registerCommand(session, "ayuda");
       await saveSession();
       return res.json({ text: buildHelpMessage() });
     }
 
-    if (userText === "reiniciar") {
+    if (matchedCommand === "reiniciar") {
       session = createDefaultSession(rootNodeId);
       bumpMetric(session, "restartCount");
       registerCommand(session, "reiniciar");
@@ -499,7 +527,7 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    if (userText === "inicio") {
+    if (matchedCommand === "inicio") {
       registerCommand(session, "inicio");
       if (session.audience) {
         session.currentNodeId = MAIN_MENU_ID;
@@ -512,13 +540,13 @@ app.post("/chat", async (req, res) => {
       return openMenu(rootNodeId, "both");
     }
 
-    if (userText === "menu" || userText === "menus" || userText === "menú") {
+    if (matchedCommand === "menu") {
       registerCommand(session, "menu");
       const node = getNode(nodes, session.currentNodeId) || getNode(nodes, rootNodeId);
       return openMenu(node.id, session.audience || "both");
     }
 
-    if (userText === "volver") {
+    if (matchedCommand === "volver") {
       registerCommand(session, "volver");
       if (session.stack.length > 1) {
         session.stack.pop();
@@ -534,7 +562,7 @@ app.post("/chat", async (req, res) => {
       return openMenu(session.currentNodeId, session.audience || "both");
     }
 
-    if (userText === "soporte") {
+    if (matchedCommand === "soporte") {
       registerCommand(session, "soporte");
       bumpMetric(session, "supportCount");
       session.currentNodeId = SUPPORT_MENU_ID;
@@ -542,7 +570,7 @@ app.post("/chat", async (req, res) => {
       return openMenu(SUPPORT_MENU_ID, session.audience || "both");
     }
 
-    if (userText === "contacto") {
+    if (matchedCommand === "contacto") {
       registerCommand(session, "contacto");
       bumpMetric(session, "contactCount");
       session.currentNodeId = CONTACT_MENU_ID;
@@ -550,7 +578,7 @@ app.post("/chat", async (req, res) => {
       return openMenu(CONTACT_MENU_ID, session.audience || "both");
     }
 
-    if (userText === "urgente") {
+    if (matchedCommand === "urgente") {
       registerCommand(session, "urgente");
       bumpMetric(session, "urgentCount");
       const urgentNode = getNode(nodes, URGENT_LEAF_ID);
