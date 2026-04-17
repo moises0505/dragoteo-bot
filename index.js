@@ -128,6 +128,10 @@ function getNodeIcon(node) {
   const id = node.id || "";
   const label = normalizeText(node.label || "");
 
+  if (id === "aud_prepa") return "🏫";
+  if (id === "aud_universidad") return "🎓";
+  if (id === "aud_ambas") return "🔀";
+  if (id === "aud_no_seguro") return "❓";
   if (node.type === "audience_option") return "🧭";
   if (label.includes("horario")) return "🕒";
   if (label.includes("grupo")) return "👥";
@@ -183,11 +187,21 @@ function formatOptions(children) {
   return children.map((child, index) => `${index + 1}. ${getNodeIcon(child)} ${child.label}`);
 }
 
+function getCommandHint(nodeId, hasAudience) {
+  if (nodeId === ROOT_NODE_ID && !hasAudience) {
+    return "Comandos: menú, ayuda, reiniciar";
+  }
+
+  return "Comandos: menú, volver, ayuda";
+}
+
 function buildResponse(lines) {
   return [BRAND, "", ...lines].join("\n");
 }
 
 function buildMenuMessage(title, children, selectedAudience) {
+  const activeNodeId = children.length && children[0].type === "audience_option" ? ROOT_NODE_ID : null;
+
   return buildResponse([
     getAudienceLabel(selectedAudience),
     "",
@@ -195,7 +209,7 @@ function buildMenuMessage(title, children, selectedAudience) {
     "",
     ...formatOptions(children),
     "",
-    "Comandos: menú, volver, ayuda"
+    getCommandHint(activeNodeId, selectedAudience !== "both" || title !== "Seleccione su contexto docente")
   ]);
 }
 
