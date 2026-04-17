@@ -129,15 +129,22 @@ Importante:
 
 Requisitos inferidos:
 
-- Node.js
-- acceso al proyecto correcto de Google Cloud
-- credenciales válidas para Firestore
+- Node.js compatible con las dependencias instaladas
+- `npm install` ejecutado en el repo
+- acceso al proyecto correcto de Google Cloud si se quiere usar Firestore real
+- credenciales válidas para Firestore si se quiere probar `POST /chat` o publicar menú
 
 Instalación y arranque:
 
 ```bash
 npm install
 npm start
+```
+
+También puede arrancarse con:
+
+```bash
+node index.js
 ```
 
 El backend levanta en:
@@ -158,9 +165,33 @@ Respuesta esperada:
 DRAGOTEO está vivo.
 ```
 
+Qué sí puede confirmarse localmente con evidencia del repo:
+
+- que el proceso Node arranca
+- que el entrypoint es `index.js`
+- que el servicio intenta escuchar en `PORT || 8080`
+
+Qué no puede operarse completamente sin dependencias externas:
+
+- `POST /chat`, porque depende de Firestore y de que exista `publishedMenus/main`
+- publicación del menú, porque `seed-menu.js` escribe directo en Firestore
+- validación real de Google Chat, porque la configuración del bot no está en el repo
+
+Error confirmado al intentar publicar sin configuración GCP:
+
+```text
+Unable to detect a Project Id in the current environment.
+```
+
 ## Publicar El Menú
 
 El menú se publica con:
+
+```bash
+npm run publish-menu
+```
+
+o directamente:
 
 ```bash
 node seed-menu.js
@@ -178,11 +209,26 @@ Antes de ejecutarlo conviene:
 - validar la estructura del árbol
 - confirmar que el cambio corresponde al bot activo
 
+Prerequisitos mínimos para que funcione:
+
+- Project ID resoluble por Google Cloud SDK / ADC
+- credenciales con permisos de escritura sobre Firestore
+- acceso al proyecto correcto donde vive `publishedMenus/main`
+
 ## Despliegue
 
 Este repositorio no incluye scripts o configuración explícita de despliegue para Cloud Run, Firebase o Google Chat.
 
 Con la evidencia disponible, el backend está preparado para un despliegue HTTP simple, compatible con Cloud Run o infraestructura equivalente, pero la configuración real del servicio y del bot en Google Chat debe validarse fuera del repo.
+
+Huecos operativos que siguen fuera del repositorio:
+
+- nombre del servicio real
+- proyecto y región de despliegue
+- cuenta de servicio usada por el backend
+- URL productiva configurada en Google Chat
+- comando exacto de despliegue
+- procedimiento versionado de rollback
 
 ## Portabilidad A WhatsApp
 
@@ -218,6 +264,10 @@ La dirección recomendada es:
 3. `index.js`
 4. payload entrante desde Google Chat
 5. credenciales y acceso a Firestore
+
+## Mayor Riesgo De Continuidad Hoy
+
+La mayor ausencia operativa del repo no es de código, sino de configuración versionada: no hay referencia confirmada al proyecto GCP, al servicio real de Cloud Run ni a la configuración del bot en Google Chat. Eso impide retomar despliegue o validación productiva sin memoria humana o acceso manual a consola.
 
 ## Notas De Continuidad
 

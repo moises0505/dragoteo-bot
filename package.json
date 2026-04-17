@@ -4,7 +4,8 @@
   "description": "Backend inicial de DRAGOBOT",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "publish-menu": "node seed-menu.js"
   },
   "type": "commonjs",
   "dependencies": {
