@@ -67,7 +67,10 @@ function createDefaultSession(rootNodeId) {
     currentNodeId: rootNodeId,
     stack: [],
     updatedAt: new Date().toISOString(),
-    metrics: createEmptyMetrics()
+    metrics: createEmptyMetrics(),
+    pendingSuggestions: [],
+    pendingInput: null,
+    pendingNodeId: null
   };
 }
 
@@ -97,6 +100,12 @@ function registerMatch(session, nodeId, type) {
   session.metrics.lastMatchedNodeId = nodeId;
   if (type === "menu") bumpMetric(session, "menuViews");
   if (type === "leaf") bumpMetric(session, "leafViews");
+}
+
+function clearPendingSuggestions(session) {
+  session.pendingSuggestions = [];
+  session.pendingInput = null;
+  session.pendingNodeId = null;
 }
 
 function isSessionExpired(updatedAt) {
@@ -275,6 +284,20 @@ function buildAmbiguousMessage(suggestions, selectedAudience) {
   ]);
 }
 
+function buildConfirmationMessage(suggestions, selectedAudience) {
+  return buildResponse([
+    getAudienceLabel(selectedAudience),
+    "",
+    "❓ Detecté una ruta probable.",
+    "",
+    "Posibles opciones:",
+    "",
+    ...suggestions.map((item, index) => `${index + 1}. ${item.label}`),
+    "",
+    "Escriba el número, el nombre completo o ajuste su texto."
+  ]);
+}
+
 function buildSystemMessage(message, selectedAudience) {
   return buildResponse([
     getAudienceLabel(selectedAudience),
@@ -405,7 +428,7 @@ function findMatchingOption(userText, children) {
   if (/^\d+$/.test(normalized)) {
     const index = Number(normalized) - 1;
     if (index >= 0 && index < children.length) {
-      return { match: children[index], ambiguous: false, suggestions: [] };
+      return { match: children[index], ambiguous: false, suggestions: [], needsConfirmation: false };
     }
   }
 
@@ -418,18 +441,28 @@ function findMatchingOption(userText, children) {
     .sort((a, b) => b.score - a.score);
 
   if (!ranked.length) {
-    return { match: null, ambiguous: false, suggestions: [] };
+    return { match: null, ambiguous: false, suggestions: [], needsConfirmation: false };
   }
 
   if (ranked[0].score >= 85 && (!ranked[1] || ranked[0].score - ranked[1].score >= 5)) {
-    return { match: ranked[0].child, ambiguous: false, suggestions: [] };
+    const topCandidateTexts = getNodeMatchTexts(ranked[0].child);
+    const exactTextMatch = topCandidateTexts.includes(normalized);
+    const exactNumericMatch = /^\d+$/.test(normalized);
+
+    return {
+      match: ranked[0].child,
+      ambiguous: false,
+      suggestions: exactTextMatch || exactNumericMatch ? [] : [ranked[0].child.label],
+      needsConfirmation: !(exactTextMatch || exactNumericMatch)
+    };
   }
 
   if (ranked.length > 1 && ranked[0].score === ranked[1].score && ranked[0].score < 100) {
     return {
       match: null,
       ambiguous: true,
-      suggestions: ranked.slice(0, 3).map((item) => item.child.label)
+      suggestions: ranked.slice(0, 3).map((item) => item.child.label),
+      needsConfirmation: false
     };
   }
 
@@ -437,11 +470,12 @@ function findMatchingOption(userText, children) {
     return {
       match: null,
       ambiguous: true,
-      suggestions: ranked.slice(0, 3).map((item) => item.child.label)
+      suggestions: ranked.slice(0, 3).map((item) => item.child.label),
+      needsConfirmation: false
     };
   }
 
-  return { match: ranked[0].child, ambiguous: false, suggestions: [] };
+  return { match: ranked[0].child, ambiguous: false, suggestions: [], needsConfirmation: false };
 }
 
 function findSuggestedOptions(userText, children) {
@@ -503,7 +537,10 @@ app.post("/chat", async (req, res) => {
         currentNodeId: saved.currentNodeId || rootNodeId,
         stack: Array.isArray(saved.stack) ? saved.stack : [],
         updatedAt: saved.updatedAt || null,
-        metrics: mergeMetrics(saved.metrics)
+        metrics: mergeMetrics(saved.metrics),
+        pendingSuggestions: Array.isArray(saved.pendingSuggestions) ? saved.pendingSuggestions : [],
+        pendingInput: saved.pendingInput || null,
+        pendingNodeId: saved.pendingNodeId || null
       };
     }
 
@@ -514,6 +551,9 @@ app.post("/chat", async (req, res) => {
           currentNodeId: session.currentNodeId,
           stack: session.stack,
           metrics: session.metrics,
+          pendingSuggestions: session.pendingSuggestions,
+          pendingInput: session.pendingInput,
+          pendingNodeId: session.pendingNodeId,
           updatedAt: new Date().toISOString()
         },
         { merge: true }
@@ -552,6 +592,7 @@ app.post("/chat", async (req, res) => {
     const matchedCommand = findCommandMatch(userText);
 
     if (matchedCommand === "ayuda") {
+      clearPendingSuggestions(session);
       registerCommand(session, "ayuda");
       await saveSession();
       return res.json({ text: buildHelpMessage() });
@@ -577,6 +618,7 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matchedCommand === "inicio") {
+      clearPendingSuggestions(session);
       registerCommand(session, "inicio");
       if (session.audience) {
         session.currentNodeId = MAIN_MENU_ID;
@@ -590,12 +632,14 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matchedCommand === "menu") {
+      clearPendingSuggestions(session);
       registerCommand(session, "menu");
       const node = getNode(nodes, session.currentNodeId) || getNode(nodes, rootNodeId);
       return openMenu(node.id, session.audience || "both");
     }
 
     if (matchedCommand === "volver") {
+      clearPendingSuggestions(session);
       registerCommand(session, "volver");
       if (session.stack.length > 1) {
         session.stack.pop();
@@ -612,6 +656,7 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matchedCommand === "soporte") {
+      clearPendingSuggestions(session);
       registerCommand(session, "soporte");
       bumpMetric(session, "supportCount");
       session.currentNodeId = SUPPORT_MENU_ID;
@@ -620,6 +665,7 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matchedCommand === "contacto") {
+      clearPendingSuggestions(session);
       registerCommand(session, "contacto");
       bumpMetric(session, "contactCount");
       session.currentNodeId = CONTACT_MENU_ID;
@@ -628,6 +674,7 @@ app.post("/chat", async (req, res) => {
     }
 
     if (matchedCommand === "urgente") {
+      clearPendingSuggestions(session);
       registerCommand(session, "urgente");
       bumpMetric(session, "urgentCount");
       const urgentNode = getNode(nodes, URGENT_LEAF_ID);
@@ -644,6 +691,7 @@ app.post("/chat", async (req, res) => {
       userText === "hola" ||
       userText === "start"
     ) {
+      clearPendingSuggestions(session);
       if (!session.audience) {
         session.currentNodeId = rootNodeId;
         session.stack = [];
@@ -657,7 +705,41 @@ app.post("/chat", async (req, res) => {
 
     const node = getNode(nodes, session.currentNodeId) || getNode(nodes, rootNodeId);
 
+    if (session.pendingSuggestions.length && session.pendingNodeId === node.id) {
+      const pendingChildren = session.pendingSuggestions
+        .map((id) => getNode(nodes, id))
+        .filter(Boolean);
+
+      const pendingResult = findMatchingOption(userText, pendingChildren);
+
+      if (pendingResult.match && !pendingResult.needsConfirmation) {
+        clearPendingSuggestions(session);
+        const matched = pendingResult.match;
+
+        if (matched.type === "menu") {
+          session.currentNodeId = matched.id;
+          session.stack.push(matched.id);
+          registerMatch(session, matched.id, "menu");
+          await saveSession();
+
+          const nextChildren = getVisibleChildren(matched, nodes, session.audience || "both");
+          return res.json({
+            text: buildMenuMessage(matched.label, nextChildren, session.audience || "both")
+          });
+        }
+
+        if (matched.type === "leaf") {
+          registerMatch(session, matched.id, "leaf");
+          await saveSession();
+          return res.json({
+            text: buildLeafMessage(matched, session.audience || "both")
+          });
+        }
+      }
+    }
+
     if (node.type !== "menu") {
+      clearPendingSuggestions(session);
       session.currentNodeId = session.audience ? MAIN_MENU_ID : rootNodeId;
       session.stack = session.audience ? [MAIN_MENU_ID] : [];
       return openMenu(session.currentNodeId, session.audience || "both");
@@ -668,13 +750,36 @@ app.post("/chat", async (req, res) => {
 
     if (result.ambiguous) {
       bumpMetric(session, "ambiguousCount");
+      session.pendingSuggestions = result.suggestions
+        .map((label) => children.find((child) => child.label === label)?.id)
+        .filter(Boolean);
+      session.pendingInput = incomingText;
+      session.pendingNodeId = node.id;
       await saveSession();
       return res.json({
-        text: buildAmbiguousMessage(result.suggestions, session.audience || "both")
+        text: buildConfirmationMessage(
+          session.pendingSuggestions.map((id) => getNode(nodes, id)).filter(Boolean),
+          session.audience || "both"
+        )
+      });
+    }
+
+    if (result.needsConfirmation) {
+      bumpMetric(session, "ambiguousCount");
+      session.pendingSuggestions = [result.match.id];
+      session.pendingInput = incomingText;
+      session.pendingNodeId = node.id;
+      await saveSession();
+      return res.json({
+        text: buildConfirmationMessage(
+          session.pendingSuggestions.map((id) => getNode(nodes, id)).filter(Boolean),
+          session.audience || "both"
+        )
       });
     }
 
     if (!result.match) {
+      clearPendingSuggestions(session);
       registerFallback(session, incomingText);
       await saveSession();
       return res.json({
@@ -683,6 +788,7 @@ app.post("/chat", async (req, res) => {
     }
 
     const matched = result.match;
+    clearPendingSuggestions(session);
 
     if (matched.type === "audience_option") {
       registerMatch(session, matched.id, "menu");
