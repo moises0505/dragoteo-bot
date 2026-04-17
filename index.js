@@ -8,7 +8,6 @@ app.use(express.json());
 
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 const BRAND = "DragoTeo 🐉 | Universidad Mondragón México";
-const SIGNATURE = "— DragoTeo 🐉";
 const ROOT_NODE_ID = "audience_selector";
 const MAIN_MENU_ID = "main_menu";
 const SUPPORT_MENU_ID = "support_menu";
@@ -147,7 +146,7 @@ function formatOptions(children) {
 }
 
 function buildResponse(lines) {
-  return [BRAND, ...lines.filter(Boolean), SIGNATURE].join("\n");
+  return [BRAND, "", ...lines].join("\n");
 }
 
 function buildMenuMessage(title, children, selectedAudience) {
@@ -214,6 +213,7 @@ function buildAmbiguousMessage(suggestions, selectedAudience) {
 function buildSystemMessage(message, selectedAudience) {
   return buildResponse([
     getAudienceLabel(selectedAudience),
+    "",
     message
   ]);
 }
