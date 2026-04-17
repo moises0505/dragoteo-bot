@@ -208,7 +208,7 @@ function formatOptions(children) {
 
 function getCommandHint(nodeId, hasAudience) {
   if (nodeId === ROOT_NODE_ID && !hasAudience) {
-    return "Comandos: menú, ayuda, reiniciar";
+    return "Comandos: ayuda, reiniciar";
   }
 
   if (nodeId === MAIN_MENU_ID) {
