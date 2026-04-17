@@ -253,11 +253,39 @@ function buildHelpMessage() {
   ]);
 }
 
-function buildFallbackMessage(node, children, selectedAudience, userText) {
+function formatSuggestionItem(item) {
+  if (item.parentLabel) {
+    return `${getNodeIcon(item)} ${item.label} · ${item.parentLabel}`;
+  }
+
+  return `${getNodeIcon(item)} ${item.label}`;
+}
+
+function findDeepSuggestedOptions(userText, children, nodes, selectedAudience) {
+  const normalized = normalizeText(userText);
+  if (!normalized) return [];
+
+  return children
+    .filter((child) => child.type === "menu")
+    .flatMap((child) =>
+      getVisibleChildren(child, nodes, selectedAudience).map((grandchild) => ({
+        ...grandchild,
+        parentLabel: child.label,
+        score: scoreNode(normalized, grandchild)
+      }))
+    )
+    .filter((item) => item.score >= 35)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+function buildFallbackMessage(node, children, nodes, selectedAudience, userText) {
   const likely = findSuggestedOptions(userText, children);
-  const suggestionsSource = likely.length
-    ? likely.map((child) => `${getNodeIcon(child)} ${child.label}`)
-    : children.slice(0, 4).map((child) => `${getNodeIcon(child)} ${child.label}`);
+  const deepLikely = likely.length ? [] : findDeepSuggestedOptions(userText, children, nodes, selectedAudience);
+  const chosenSuggestions = likely.length ? likely : deepLikely;
+  const suggestionsSource = chosenSuggestions.length
+    ? chosenSuggestions.map((item) => formatSuggestionItem(item))
+    : children.slice(0, 4).map((child) => formatSuggestionItem(child));
   const suggestions = suggestionsSource.map((label, index) => `${index + 1}. ${label}`);
 
   return buildResponse([
@@ -265,7 +293,7 @@ function buildFallbackMessage(node, children, selectedAudience, userText) {
     "",
     `⚠️ No ubiqué esa opción en: ${node.label}.`,
     "",
-    ...(likely.length ? ["Posibles rutas:", ""] : []),
+    ...(chosenSuggestions.length ? ["Posibles rutas:", ""] : []),
     ...suggestions,
     "",
     "Use menú, inicio o ayuda."
@@ -802,7 +830,7 @@ app.post("/chat", async (req, res) => {
       registerFallback(session, incomingText);
       await saveSession();
       return res.json({
-        text: buildFallbackMessage(node, children, session.audience || "both", incomingText)
+        text: buildFallbackMessage(node, children, nodes, session.audience || "both", incomingText)
       });
     }
 
