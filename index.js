@@ -123,17 +123,41 @@ function getAudienceLabel(selectedAudience) {
   return "Contexto: Sin definir";
 }
 
+function getNodeIcon(node) {
+  if (!node) return "📌";
+
+  const id = node.id || "";
+  const label = normalizeText(node.label || "");
+
+  if (node.type === "audience_option") return "🧭";
+  if (id.includes("classes") || label.includes("clases") || label.includes("horarios")) return "📚";
+  if (id.includes("evaluation") || label.includes("evaluacion") || label.includes("parciales")) return "📝";
+  if (id.includes("spaces") || label.includes("aulas") || label.includes("espacios")) return "🏫";
+  if (id.includes("requests") || label.includes("solicitudes") || label.includes("formatos")) return "📄";
+  if (id.includes("rules") || label.includes("reglamentos") || label.includes("lineamientos")) return "📘";
+  if (id.includes("support") || label.includes("soporte") || label.includes("incidencias")) return "🛠️";
+  if (id.includes("contact") || label.includes("contactos")) return "☎️";
+  if (id.includes("alert") || label.includes("avisos")) return "📢";
+  if (label.includes("urgente")) return "🚨";
+  return node.type === "menu" ? "📂" : "📌";
+}
+
+function formatOptions(children) {
+  return children.map((child, index) => `${index + 1}. ${getNodeIcon(child)} ${child.label}`);
+}
+
 function buildResponse(lines) {
   return [BRAND, ...lines.filter(Boolean), SIGNATURE].join("\n");
 }
 
 function buildMenuMessage(title, children, selectedAudience) {
-  const numbered = children.map((child, index) => `${index + 1}. ${child.label}`);
-
   return buildResponse([
     getAudienceLabel(selectedAudience),
-    `Menú: ${title}`,
-    ...numbered,
+    "",
+    `📂 ${title}`,
+    "",
+    ...formatOptions(children),
+    "",
     "Comandos: menú, volver, ayuda"
   ]);
 }
@@ -143,14 +167,17 @@ function buildLeafMessage(node, selectedAudience) {
 
   return buildResponse([
     getAudienceLabel(selectedAudience),
-    `Tema: ${node.label}`,
+    "",
+    `${getNodeIcon(node)} ${node.label}`,
+    "",
     configured || "Ruta sin respuesta cerrada. Use soporte, contacto o menú."
   ]);
 }
 
 function buildHelpMessage() {
   return buildResponse([
-    "Use el número o el nombre de una opción.",
+    "ℹ️ Use el número o el nombre de una opción.",
+    "",
     "Comandos: menú, inicio, volver, reiniciar, ayuda.",
     "Atajos: soporte, contacto, urgente."
   ]);
@@ -163,8 +190,11 @@ function buildFallbackMessage(node, children, selectedAudience) {
 
   return buildResponse([
     getAudienceLabel(selectedAudience),
-    `No ubiqué esa opción en: ${node.label}.`,
+    "",
+    `⚠️ No ubiqué esa opción en: ${node.label}.`,
+    "",
     ...suggestions,
+    "",
     "Use menú, inicio o ayuda."
   ]);
 }
@@ -172,8 +202,11 @@ function buildFallbackMessage(node, children, selectedAudience) {
 function buildAmbiguousMessage(suggestions, selectedAudience) {
   return buildResponse([
     getAudienceLabel(selectedAudience),
-    "Ubico más de una ruta posible.",
+    "",
+    "⚠️ Ubico más de una ruta posible.",
+    "",
     ...suggestions.map((item, index) => `${index + 1}. ${item}`),
+    "",
     "Escriba el número o el nombre más completo."
   ]);
 }
@@ -264,7 +297,7 @@ app.post("/chat", async (req, res) => {
     if (!menuDoc.exists) {
       return res.json({
         text: buildResponse([
-          "No localicé el menú institucional publicado.",
+          "⚠️ No localicé el menú institucional publicado.",
           "Solicite validación del despliegue."
         ])
       });
@@ -324,9 +357,11 @@ app.post("/chat", async (req, res) => {
 
       return res.json({
         text: buildResponse([
-          "La sesión anterior se cerró por inactividad.",
-          `Menú: ${rootNode.label}`,
-          ...rootChildren.map((child, index) => `${index + 1}. ${child.label}`)
+          "⏳ La sesión anterior se cerró por inactividad.",
+          "",
+          `📂 ${rootNode.label}`,
+          "",
+          ...formatOptions(rootChildren)
         ])
       });
     }
@@ -347,9 +382,11 @@ app.post("/chat", async (req, res) => {
 
       return res.json({
         text: buildResponse([
-          "Sesión reiniciada.",
-          `Menú: ${rootNode.label}`,
-          ...rootChildren.map((child, index) => `${index + 1}. ${child.label}`)
+          "🔄 Sesión reiniciada.",
+          "",
+          `📂 ${rootNode.label}`,
+          "",
+          ...formatOptions(rootChildren)
         ])
       });
     }
@@ -475,9 +512,12 @@ app.post("/chat", async (req, res) => {
       return res.json({
         text: buildResponse([
           getAudienceLabel(session.audience),
-          `Contexto confirmado: ${matched.label}.`,
-          `Menú: ${mainMenu.label}`,
-          ...mainChildren.map((child, index) => `${index + 1}. ${child.label}`)
+          "",
+          `✅ Contexto confirmado: ${matched.label}.`,
+          "",
+          `📂 ${mainMenu.label}`,
+          "",
+          ...formatOptions(mainChildren)
         ])
       });
     }
@@ -505,13 +545,13 @@ app.post("/chat", async (req, res) => {
     registerFallback(session, incomingText);
     await saveSession();
     return res.json({
-      text: buildSystemMessage("La ruta seleccionada no está disponible.", session.audience || "both")
+      text: buildSystemMessage("⚠️ La ruta seleccionada no está disponible.", session.audience || "both")
     });
   } catch (error) {
     console.error(error);
     return res.json({
       text: buildResponse([
-        "Ocurrió un error al procesar la solicitud.",
+        "⚠️ Ocurrió un error al procesar la solicitud.",
         "Use menú o contacte soporte."
       ])
     });
