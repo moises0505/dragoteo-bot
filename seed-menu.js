@@ -13,6 +13,14 @@ function addLeaf(id, label, audience = "both", response = null) {
   nodes[id] = node;
 }
 
+function addAliases(id, aliases) {
+  if (!nodes[id]) {
+    throw new Error(`No existe el nodo para asignar alias: ${id}`);
+  }
+
+  nodes[id].aliases = aliases;
+}
+
 function addAudienceOption(id, label, value) {
   nodes[id] = {
     id,
@@ -390,6 +398,71 @@ addLeaf(
   "both",
   "Revise cierres, capturas y entregables próximos del periodo."
 );
+
+/* =========================
+   ALIAS DE BÚSQUEDA
+========================= */
+
+addAliases("aud_prepa", ["prepa", "preparatoria", "bachillerato"]);
+addAliases("aud_universidad", ["uni", "universidad", "licenciatura"]);
+addAliases("aud_ambas", ["ambas", "los dos", "ambos"]);
+addAliases("aud_no_seguro", ["no se", "no estoy seguro", "no seguro", "duda"]);
+
+addAliases("classes_menu", ["horarios", "clases", "grupo", "calendario"]);
+addAliases("evaluation_menu", ["evaluacion", "parciales", "calificaciones", "rubrica"]);
+addAliases("spaces_menu", ["aulas", "salon", "espacios", "classroom"]);
+addAliases("requests_menu", ["formatos", "solicitudes", "tramites", "documentos"]);
+addAliases("rules_menu", ["reglamento", "lineamientos", "reglas", "normas"]);
+addAliases("support_menu", ["soporte", "incidencias", "error", "problema"]);
+addAliases("contacts_menu", ["contactos", "directorio", "coordinacion"]);
+addAliases("alerts_menu", ["avisos", "fechas", "cambios", "mantenimiento"]);
+
+addAliases("class_schedule", ["horario", "horarios", "mi horario"]);
+addAliases("class_groups", ["grupo", "grupos", "clase", "materia"]);
+addAliases("class_assignment", ["asignadas", "carga docente", "clases asignadas"]);
+addAliases("class_calendar", ["calendario", "fechas", "periodo"]);
+addAliases("class_attendance", ["asistencia", "lista", "pase de lista"]);
+
+addAliases("eval_grading", ["calificaciones", "captura", "subir calificaciones"]);
+addAliases("eval_rubrics", ["rubrica", "rubricas", "criterios"]);
+addAliases("eval_partial_dates", ["parciales", "fecha parcial", "fechas de parcial"]);
+addAliases("eval_capture_errors", ["error captura", "error al capturar", "falla captura"]);
+addAliases("eval_records", ["actas", "reportes", "cierre"]);
+
+addAliases("space_room", ["salon", "salon asignado", "aula"]);
+addAliases("space_change", ["cambio de aula", "cambio de salon", "cambiar aula"]);
+addAliases("space_virtual", ["classroom", "aula virtual", "aulas virtuales"]);
+addAliases("space_resources", ["recursos", "espacio", "equipo"]);
+addAliases("space_library", ["biblioteca", "salas", "prestamo"]);
+
+addAliases("req_absence", ["ausencia", "falta", "permiso"]);
+addAliases("req_documents", ["documentos", "datos", "actualizacion"]);
+addAliases("req_constancy", ["constancia", "laboral"]);
+addAliases("req_schedule_change", ["cambio de horario", "mover horario"]);
+addAliases("req_reports", ["formato", "reportes", "solicitud"]);
+
+addAliases("rule_academic", ["academico", "lineamientos academicos"]);
+addAliases("rule_evaluation", ["lineamientos de evaluacion", "evaluacion"]);
+addAliases("rule_attendance", ["reglas de asistencia", "asistencia"]);
+addAliases("rule_classroom", ["classroom", "plataforma", "plataformas"]);
+addAliases("rule_period", ["cierres", "fechas", "periodo"]);
+
+addAliases("support_technical", ["tecnico", "sistema", "error tecnico"]);
+addAliases("support_academic", ["academica", "academico", "problema academico"]);
+addAliases("support_operations", ["operaciones", "horario", "aula"]);
+addAliases("support_platforms", ["plataforma", "classroom", "acceso"]);
+addAliases("urgent_support", ["urgente", "emergencia", "prioridad"]);
+
+addAliases("contact_coordination", ["coordinacion", "coordinador"]);
+addAliases("contact_operations", ["operaciones docentes", "operaciones"]);
+addAliases("contact_support", ["soporte institucional", "soporte"]);
+addAliases("contact_directory", ["directorio", "contactos"]);
+addAliases("contact_reports", ["seguimiento", "reporte"]);
+
+addAliases("alert_calendar", ["fechas clave", "calendario"]);
+addAliases("alert_changes", ["cambios recientes", "cambios"]);
+addAliases("alert_maintenance", ["mantenimiento", "incidencia"]);
+addAliases("alert_deadlines", ["pendientes", "urgente", "vencimiento"]);
 
 function validateMenuStructure() {
   const requiredNodes = ["audience_selector", "main_menu", "support_menu", "contacts_menu"];

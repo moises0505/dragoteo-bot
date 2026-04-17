@@ -234,16 +234,19 @@ function buildHelpMessage() {
   ]);
 }
 
-function buildFallbackMessage(node, children, selectedAudience) {
-  const suggestions = children
-    .slice(0, 4)
-    .map((child, index) => `${index + 1}. ${child.label}`);
+function buildFallbackMessage(node, children, selectedAudience, userText) {
+  const likely = findSuggestedOptions(userText, children);
+  const suggestionsSource = likely.length
+    ? likely
+    : children.slice(0, 4).map((child) => child.label);
+  const suggestions = suggestionsSource.map((label, index) => `${index + 1}. ${label}`);
 
   return buildResponse([
     getAudienceLabel(selectedAudience),
     "",
     `⚠️ No ubiqué esa opción en: ${node.label}.`,
     "",
+    ...(likely.length ? ["Posibles rutas:", ""] : []),
     ...suggestions,
     "",
     "Use menú, inicio o ayuda."
@@ -270,9 +273,41 @@ function buildSystemMessage(message, selectedAudience) {
   ]);
 }
 
-function scoreMatch(input, label) {
+function getNodeMatchTexts(node) {
+  return [node.label, ...(Array.isArray(node.aliases) ? node.aliases : [])]
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+}
+
+function getEditDistance(leftText, rightText) {
+  const left = normalizeText(leftText);
+  const right = normalizeText(rightText);
+
+  if (!left || !right) return Number.MAX_SAFE_INTEGER;
+  if (left === right) return 0;
+
+  const dp = Array.from({ length: left.length + 1 }, () => new Array(right.length + 1).fill(0));
+
+  for (let i = 0; i <= left.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= left.length; i++) {
+    for (let j = 1; j <= right.length; j++) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[left.length][right.length];
+}
+
+function scoreMatch(input, candidate) {
   const text = normalizeText(input);
-  const normalizedLabel = normalizeText(label);
+  const normalizedLabel = normalizeText(candidate);
 
   if (!text || !normalizedLabel) return 0;
   if (text === normalizedLabel) return 100;
@@ -291,6 +326,11 @@ function scoreMatch(input, label) {
   }
 
   if (overlap > 0) return 50 + overlap;
+
+  const distance = getEditDistance(text, normalizedLabel);
+  if (distance === 1) return 66;
+  if (distance === 2 && text.length >= 5) return 62;
+
   return 0;
 }
 
@@ -309,7 +349,7 @@ function findMatchingOption(userText, children) {
   const ranked = children
     .map((child) => ({
       child,
-      score: scoreMatch(normalized, child.label)
+      score: Math.max(...getNodeMatchTexts(child).map((candidate) => scoreMatch(normalized, candidate)), 0)
     }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -327,6 +367,22 @@ function findMatchingOption(userText, children) {
   }
 
   return { match: ranked[0].child, ambiguous: false, suggestions: [] };
+}
+
+function findSuggestedOptions(userText, children) {
+  const normalized = normalizeText(userText);
+
+  if (!normalized) return [];
+
+  return children
+    .map((child) => ({
+      child,
+      score: Math.max(...getNodeMatchTexts(child).map((candidate) => scoreMatch(normalized, candidate)), 0)
+    }))
+    .filter((item) => item.score >= 45)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((item) => item.child.label);
 }
 
 app.get("/", (req, res) => {
@@ -545,7 +601,7 @@ app.post("/chat", async (req, res) => {
       registerFallback(session, incomingText);
       await saveSession();
       return res.json({
-        text: buildFallbackMessage(node, children, session.audience || "both")
+        text: buildFallbackMessage(node, children, session.audience || "both", incomingText)
       });
     }
 
